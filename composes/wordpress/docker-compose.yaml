@@ -1,0 +1,45 @@
+services:
+  wordpress:
+    image: wordpress:latest
+    container_name: wordpress_multisite
+    ports:
+      - "8080:80"
+    environment:
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: user8cc8c0de
+      WORDPRESS_DB_PASSWORD: b88bed03-2d43-499c-b092-2d46744d13e4
+      WORDPRESS_CONFIG_EXTRA: |
+        define('WP_ALLOW_MULTISITE', true);
+      WORDPRESS_CONFIG_WD: a5e793f7-83f2-4e68-84a3-1d1cf65fa742
+      WORDPRESS_CONFIG_WD2: aafdc0e7-9f32-4524-a5cb-8fa620265702
+    volumes:
+      - wordpress_data:/var/www/html
+    depends_on:
+      - db
+
+  db:
+    image: mysql:5.7
+    container_name: wordpress_db
+    environment:
+      MYSQL_ROOT_PASSWORD: Aae845b93-94b1-43f9-a3b4-bef39b15215d$
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: user8cc8c0de
+      MYSQL_PASSWORD: b88bed03-2d43-499c-b092-2d46744d13e4
+    volumes:
+      - db_data:/var/lib/mysql
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: db
+      MYSQL_ROOT_PASSWORD: ae845b93-94b1-43f9-a3b4-bef39b15215d
+    depends_on:
+      - db
+
+volumes:
+  wordpress_data:
+  db_data:

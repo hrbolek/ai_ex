@@ -1,0 +1,12 @@
+markitdown
+aiohttp
+
+azure-mgmt-resource
+azure-identity
+azure-mgmt-consumption
+
+azure-mgmt-storage 
+azure-mgmt-cognitiveservices 
+azure-mgmt-search
+
+azure-search-documents

@@ -1,0 +1,79 @@
+# Python related
+*.py[cod]
+__pycache__/
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+.eggs/
+*.log
+*.sqlite3
+*.env
+*.venv/
+venv/
+ENV/
+env.bak/
+*.pyc
+Pipfile
+Pipfile.lock
+
+# Python distribution/build
+build/
+dist/
+*.wheel
+*.manifest
+*.spec
+
+# Python IDE specific
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Coverage and testing
+.coverage
+*.coverage.*
+.cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.tox/
+*.pytest_cache/
+debug.log
+
+# JavaScript/Node.js related
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+package-lock.json
+yarn.lock
+.pnp.cjs
+.pnp.loader.mjs
+
+# Build artifacts
+build/
+dist/
+public/
+out/
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Environment Files
+.env
+.env.*local
+.npmrc
+.dockerignore
+
+# Sourcefiles directory
+sourcefiles/
