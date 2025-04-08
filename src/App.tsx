@@ -6,9 +6,7 @@ function App() {
     <div className="App">
       <header className="App-header">
         <input type="text" placeholder="Co chcete vyhledat?" />
-        
-        
-       
+      
       </header>
     </div>
   );
