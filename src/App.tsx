@@ -19,21 +19,17 @@ function App() {
   const [results, setResults] = useState<Array<SearchResult>>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // let AZURE_OPENAI_ENDPOINT = process.env.REACT_APP_AZURE_OPENAI_ENDPOINT || '';
-  // if (!AZURE_OPENAI_ENDPOINT) {
-  //   AZURE_OPENAI_ENDPOINT ="test";
-  //   console.error('AZURE_OPENAI_ENDPOINT is not defined in environment variables.');
-  // }
-
-  const signature = "?sv=2024-11-04&ss=bf&srt=co&sp=rx&se=2026-04-08T19:35:57Z&st=2025-04-08T11:35:57Z&spr=https&sig=Bl7RxF73HhCad2OBVXEcSQpEdIDPhwlfpfEBgIjedZo%3D"
-  const blobStorageUrl = "https://stsemanticindex.blob.core.windows.net/data/"
+  let blobStorageUrl = process.env.REACT_APP_BLOB_STORAGE_URL || '';
+  let signature = process.env.REACT_APP_BLOB_ACCESS_SIGNATURE || '';
+  
 
   async function search() {
     setIsLoading(true);
+    setResults([]); 
     try {
       const response = await fetch(`/api/search?query=${encodeURIComponent(searchText)}`);
       const data = await response.json();
-      setResults(data); // Update results state with fetched data
+      setResults(data); 
     } catch (error) {
       console.error('Error fetching search results:', error);
     } finally {
