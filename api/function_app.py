@@ -43,8 +43,8 @@ def query_vector_index(req: func.HttpRequest) -> func.HttpResponse:
 
         # Extract the embedding vector
         vector = embedding_response.data[0].embedding
-        search_service_name = "semantic-search-1"
-        index_name = "silly-arch-9ndt33qyrc"
+        search_service_name = os.getenv("SEARCH_SERVICE_NAME")
+        index_name = os.getenv("VECTOR_INDEX_NAME")
 
         # Extract the API key from environment variables
         api_key = os.getenv("AZURE_SEARCH_API_KEY")  # Ensure this is set in the environment

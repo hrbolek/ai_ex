@@ -44,3 +44,12 @@ You don’t have to ever use `eject`. The curated feature set is suitable for sm
 You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
 
 To learn React, check out the [React documentation](https://reactjs.org/).
+
+
+## Deployment using bicep
+
+Create Resource group e.g. rg-semanticindexinfra
+Copy parameters.json e.g. parameters-prod.json
+Update the parameters (location etc.)
+
+az deployment group create  --resource-group rg-semanticindexinfra --template-file main.bicep --parameters  parameters.json
