@@ -9,11 +9,32 @@ from azure.identity import DefaultAzureCredential
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 
+
 app = func.FunctionApp()
+async def getUser_id(req: func.HttpRequest) -> str:
+    """Extract user ID from the request headers."""
+    user_id = req.headers.get('x-ms-client-principal-id')
+    # if not user_id:
+    #     raise ValueError("User ID not found in request headers.")
+    return user_id
+
+async def updateUserQuota(req: func.HttpRequest) -> bool:
+    """Update user quota in the database."""
+    user_id = await getUser_id(req)
+    # Here you would typically update the user's quota in your database.
+    # For demonstration purposes, we'll just return True which means that this still can be processed for the user.
+    return True
+
 
 @app.route(route="search", auth_level=func.AuthLevel.ANONYMOUS)
-def query_vector_index(req: func.HttpRequest) -> func.HttpResponse:
+async def query_vector_index(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Python HTTP trigger function for querying vector index.')
+    userHasQuota = await updateUserQuota(req)
+    if not userHasQuota:
+        return func.HttpResponse(
+            "User has exceeded their quota.",
+            status_code=403
+        )
 
     try:
         query = req.params.get('query')  # Retrieve 'text' from query string
