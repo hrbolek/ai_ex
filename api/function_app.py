@@ -50,7 +50,7 @@ async def query_vector_index(req: func.HttpRequest) -> func.HttpResponse:
             raise ValueError("Azure OpenAI API key is not set in environment variables.")
 
         # Initialize the client
-        endpoint = "https://ai-acr500896758024.openai.azure.com/"
+        endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")  
         client = AzureOpenAI(
             api_version="2024-12-01-preview",
             azure_endpoint=endpoint,
@@ -89,7 +89,7 @@ async def query_vector_index(req: func.HttpRequest) -> func.HttpResponse:
                 "k": 10,  # Number of results to return
                 "exhaustive": True  # For higher accuracy (optional)
             }],
-            select=["title", "url", "id"]  # Fields to return
+            select=["title", "url", "id", "content"]  # Fields to return
         )
         response_data = []
         for result in results:
@@ -97,6 +97,7 @@ async def query_vector_index(req: func.HttpRequest) -> func.HttpResponse:
             "id": result["id"],
             "title": result["title"],
             "url": result["url"],
+            "content": result["content"],            
             "score": result["@search.score"]
             })
        

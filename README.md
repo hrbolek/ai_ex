@@ -53,3 +53,14 @@ Copy parameters.json e.g. parameters-prod.json
 Update the parameters (location etc.)
 
 az deployment group create  --resource-group rg-semanticindexinfra --template-file main.bicep --parameters  parameters.json
+
+
+Start react
+npm run start
+
+Start Api in api Folder
+func start --debug
+
+Combine it with SWA
+swa start http://localhost:3000 -api https://localhost:7071
+
