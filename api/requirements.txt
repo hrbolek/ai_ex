@@ -8,4 +8,5 @@ openai
 azure-search-documents
 azure-identity
 azure-core
+azure-data-tables
 numpy
