@@ -7,7 +7,7 @@ import 'primeflex/primeflex.css';
 import "primereact/resources/themes/lara-light-cyan/theme.css";
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
-import userEvent from '@testing-library/user-event';
+import { Tag } from 'primereact/tag';
 
 interface SearchResult {
   id: number;
@@ -20,8 +20,8 @@ function App() {
   const [searchText, setSearchText] = useState('');
   const [results, setResults] = useState<Array<SearchResult>>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [requestCount, setRequestCount] = useState<number>(0)
-  const [quota, setQuota] = useState<number>(0)
+  const [requestCount, setRequestCount] = useState<number | null>(null)
+  const [quota, setQuota] = useState<number | null>(null)
   const [quotaExceeded, setQuotaExceeded] = useState(false)
 
   let blobStorageUrl = process.env.REACT_APP_BLOB_STORAGE_URL || '';
@@ -58,7 +58,9 @@ function App() {
   };
 
   useEffect(() => {
-    setQuotaExceeded(requestCount >= quota)
+    if (requestCount !== null || quota !== null) {
+      setQuotaExceeded(requestCount! >= quota!)
+    }
   }, [requestCount, quota])
 
   useEffect(() => {
@@ -81,12 +83,13 @@ function App() {
     <PrimeReactProvider>
       <div className="App">
         <h2 className="text-2xl font-bold mb-4">Vyhledávání v dokumentech</h2>
+        {quotaExceeded ? <Tag severity="danger" value="Byl vyčerpán počet dotazů pro tento týden." rounded></Tag> : null}
         <div className="flex flex-column align-items-center">
           <div className="flex flex-wrap justify-content-center gap-2 mb-4 mt-4" style={{ maxWidth: '500px' }}>
             {isLoading ? <div>Načítám</div> : <>
               <div className="p-inputgroup flex-1">
-                <span className="p-inputgroup-addon">{requestCount}/{quota}</span>
-                 <InputText
+                {requestCount !== null ? <span className="p-inputgroup-addon">{requestCount}/{quota}</span> : null}
+                <InputText
                   disabled={quotaExceeded}
                   type="text"
                   placeholder="Co chcete vyhledat?"
@@ -99,7 +102,7 @@ function App() {
                   })}
                 />
 
-                <Button disabled={quotaExceeded || searchText.length === 0} label="Vyhledat" icon="ml-4" onClick={search} />
+                <Button disabled={quotaExceeded || searchText.length === 0} label="Vyhledat" onClick={search} />
               </div>
             </>}
           </div>

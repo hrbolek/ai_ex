@@ -122,3 +122,12 @@ resource storageAccounts_stsemanticindex_name_default_data 'Microsoft.Storage/st
     storageAccounts_stsemanticindex_name_resource
   ]
 }
+
+resource storageAccounts_stsemanticindex_name_default_requests 'Microsoft.Storage/storageAccounts/tableServices/tables@2024-01-01' = {
+  parent: Microsoft_Storage_storageAccounts_tableServices_storageAccounts_stsemanticindex_name_default
+  name: 'requests'
+  properties: {}
+  dependsOn: [
+    storageAccounts_stsemanticindex_name_resource
+  ]
+}
