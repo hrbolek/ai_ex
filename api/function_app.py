@@ -9,78 +9,43 @@ from azure.identity import DefaultAzureCredential
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 from azure.data.tables import TableServiceClient, TableClient
-
+from helpers.quota_utils import getUser_id, getRequestsTableClient, getOrCreateQuotaEntity, updateUserQuota
 
 app = func.FunctionApp()
-async def getUser_id(req: func.HttpRequest) -> str:
-    """Extract user ID from the request headers."""
-    user_id = req.headers.get('x-ms-client-principal-id')
-    
-    if not user_id:
-        user_id = "ff3c3ce1-e0ff-4208-8c68-720dbf6ea4d4"
-    # Retrieve the connection string for the Azure Storage Account from environment variables
-       # if not user_id:
-    #     raise ValueError("User ID not found in request headers.")
-    return user_id
-
-def getTableClient() -> TableServiceClient:
-    connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-    if not connection_string:
-        raise ValueError("Azure Storage connection string is not set in environment variables.")
-    table_service_client = TableServiceClient.from_connection_string(conn_str=connection_string)
-    return table_service_client.get_table_client(table_name="requests")
-
-def getOrCreateQuotaEntity(user_id: str, table_client: TableClient):
-    entity = table_client.get_entity(partition_key=user_id, row_key="requests")
-    if not entity:        
-        {
-            'PartitionKey': user_id,
-            'RowKey': "requests",
-            'RequestCount': 0           
-        }
-        table_client.create_entity(entity=entity)
-        return entity
-    else:
-        
-        return entity
-        
-async def updateUserQuota(req: func.HttpRequest) -> bool:
-    """Update user quota in the database."""
-    user_id = await getUser_id(req)
-    table_client = getTableClient()
-    entity = getOrCreateQuotaEntity(user_id, table_client)
-    entity['RequestCount'] =  int(entity['RequestCount']) + 1
-    table_client.update_entity(entity=entity) 
-    requestCount = int(entity['RequestCount'])  
-    quota = os.getenv("MAX_REQUESTS_PER_USER_PER_WEEK")
-    return requestCount < int(quota)
 
 @app.route(route="quota", auth_level=func.AuthLevel.ANONYMOUS)
 async def getQuota(req: func.HttpRequest) -> func.HttpResponse:
-    logging.info('Python HTTP trigger function for getting user quota.')
-    user_id = await getUser_id(req)
-    table_client = getTableClient()
-    entity = getOrCreateQuotaEntity(user_id, table_client)
-    requestCount = int(entity['RequestCount']) 
-    quota = os.getenv("MAX_REQUESTS_PER_USER_PER_WEEK")
-    
-    return func.HttpResponse(
-        json.dumps({"requestCount": requestCount, "quota": quota}),
-        status_code=200,
-        mimetype="application/json"
-    )
+    try:
+        logging.info('Python HTTP trigger function for getting user quota.')
+        user_id = await getUser_id(req)
+        table_client = getRequestsTableClient()
+        entity = getOrCreateQuotaEntity(user_id, table_client)
+        requestCount = int(entity['RequestCount']) 
+        quota = os.getenv("MAX_REQUESTS_PER_USER_PER_WEEK")
+        
+        return func.HttpResponse(
+            json.dumps({"requestCount": requestCount, "quota": quota}),
+            status_code=200,
+            mimetype="application/json"
+        )
+    except Exception as e:
+        logging.error(f"Error occured: {e}")
+        return func.HttpResponse(
+            f"Error occured {e}.",
+            status_code=500
+        )
 
 @app.route(route="search", auth_level=func.AuthLevel.ANONYMOUS)
 async def query_vector_index(req: func.HttpRequest) -> func.HttpResponse:
-    logging.info('Python HTTP trigger function for querying vector index.')
-    userHasQuota = await updateUserQuota(req)
-    if not userHasQuota:
-        return func.HttpResponse(
-            "User has exceeded their quota.",
-            status_code=403
-        )
-
     try:
+        logging.info('Python HTTP trigger function for querying vector index.')
+        userHasQuota = await updateUserQuota(req)
+        if not userHasQuota:
+            return func.HttpResponse(
+                "User has exceeded their quota.",
+                status_code=403
+            )
+
         query = req.params.get('query')  # Retrieve 'text' from query string
         if not query:
             return func.HttpResponse(
@@ -157,3 +122,4 @@ async def query_vector_index(req: func.HttpRequest) -> func.HttpResponse:
             f"Error occured {e}.",
             status_code=500
         )
+
