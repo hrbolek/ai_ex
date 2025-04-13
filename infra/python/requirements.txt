@@ -1,0 +1,15 @@
+azure.identity
+azure.mgmt.resource
+azure.mgmt.storage
+azure.mgmt.search
+azure.mgmt.web
+
+azure.mgmt.network
+azure.mgmt.keyvault
+azure.mgmt.sql
+azure.mgmt.resourcegraph
+
+azure-mgmt-storage
+azure-mgmt-web 
+azure-storage-blob
+azure-mgmt-cognitiveservices

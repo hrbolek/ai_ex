@@ -1,0 +1,7 @@
+C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\description.md
+C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\dirs.txt
+C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\host.json
+C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\requirements.txt
+C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\src
+C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\src\function.json
+C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\src\__init__.py

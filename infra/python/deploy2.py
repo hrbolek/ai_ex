@@ -1,0 +1,481 @@
+import os
+import time
+import zipfile
+import datetime
+import requests
+from pathlib import Path
+
+from azure.core.exceptions import HttpResponseError
+from azure.core.credentials import AzureKeyCredential
+
+from azure.identity import DefaultAzureCredential
+from azure.mgmt.resource import ResourceManagementClient, SubscriptionClient
+from azure.mgmt.storage import StorageManagementClient
+from azure.mgmt.web import WebSiteManagementClient
+from azure.mgmt.web.models import Site, SiteConfig, AppServicePlan
+from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
+from azure.mgmt.search import SearchManagementClient
+from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient
+from azure.mgmt.cognitiveservices.models import Account as CognitiveServicesAccount, Sku
+
+from azure.search.documents.indexes.models import (
+    SearchIndex,
+    SimpleField,
+    SearchableField,
+    VectorSearch,
+    VectorSearchAlgorithmConfiguration
+)
+
+from azure.search.documents.indexes import SearchIndexClient
+# ---------------------------
+# Pomocné funkce
+# ---------------------------
+
+def create_resource_group(resource_client, rg_name, location):
+    resource_client.resource_groups.create_or_update(rg_name, {"location": location})
+    print(f"✅ Resource Group '{rg_name}' vytvořena.")
+
+
+def create_app_service_plan(web_client, rg_name, plan_name, location):
+    print(f"Vytvářím App Service Plan '{plan_name}'...")
+    existing = None
+    try:
+        existing = web_client.app_service_plans.get(rg_name, plan_name)
+    except Exception as e:
+        pass  # Pokud plán neexistuje, budeme jej vytvářet
+
+    if not existing:
+        web_client.app_service_plans.begin_create_or_update(
+            rg_name,
+            plan_name,
+            AppServicePlan(
+                location=location,
+                kind="linux",
+                reserved=True,
+                sku={"name": "Y1", "tier": "Dynamic", "size": "Y1", "family": "Y", "capacity": 0}
+            )
+        ).result()
+        print(f"✅ App Service Plan '{plan_name}' vytvořen.")
+    else:
+        print(f"ℹ️ App Service Plan '{plan_name}' již existuje.")
+
+
+def create_storage_account(storage_client, rg_name, storage_account_name, location):
+    print(f"Vytvářím Storage Account '{storage_account_name}'...")
+    storage_client.storage_accounts.begin_create(rg_name, storage_account_name, {
+        "location": location,
+        "sku": {"name": "Standard_LRS"},
+        "kind": "StorageV2"
+    }).result()
+
+    storage_client.storage_accounts.update(
+        resource_group_name=rg_name,
+        account_name=storage_account_name,
+        parameters={
+            "network_rule_set": {
+                "default_action": "Allow",
+                "bypass": "AzureServices",
+                "virtual_network_rules": []  # Případně lze přidat subnet ID
+            }
+        }
+    )
+    print(f"✅ Storage Account '{storage_account_name}' vytvořen.")
+
+
+def get_storage_account_key(storage_client, rg_name, storage_account_name):
+    keys = storage_client.storage_accounts.list_keys(rg_name, storage_account_name)
+    return keys.keys[0].value  # Vrátíme první klíč
+
+
+def zip_function_code(source_dir: str, zip_path: str):
+    source_dir = Path(source_dir).resolve()
+    zip_path = Path(zip_path).resolve()
+    print(f"Zabalím kód funkcí z '{source_dir}' do '{zip_path}'...")
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for file_path in source_dir.rglob("*"):
+            if file_path.is_file():
+                arcname = file_path.relative_to(source_dir)
+                zipf.write(file_path, arcname)
+    print(f"✅ Kód funkcí byl zabalen do '{zip_path}'.")
+
+
+def create_or_update_function_app(web_client, subscription_id, rg_name, function_app_name, location, plan_name, storage_account_name, connection_string):
+    print(f"Vytvářím nebo aktualizuji Function App '{function_app_name}'...")
+    try:
+        existing = web_client.web_apps.get(rg_name, function_app_name)
+    except Exception:
+        existing = None
+
+    if not existing:
+        site_config = SiteConfig(
+            linux_fx_version="PYTHON|3.11",
+            app_settings=[
+                {"name": "AzureWebJobsStorage", "value": connection_string},
+                {"name": "FUNCTIONS_WORKER_RUNTIME", "value": "python"},
+                {"name": "FUNCTIONS_EXTENSION_VERSION", "value": "~4"},
+                # WEBSITE_RUN_FROM_PACKAGE bude později nastaveno na URL ZIP balíčku
+            ]
+        )
+        server_farm_id = f"/subscriptions/{subscription_id}/resourceGroups/{rg_name}/providers/Microsoft.Web/serverfarms/{plan_name}"
+        web_client.web_apps.begin_create_or_update(
+            rg_name, function_app_name,
+            Site(
+                location=location,
+                kind="functionapp,linux",
+                reserved=True,
+                server_farm_id=server_farm_id,
+                site_config=site_config
+            )
+        ).result()
+        print(f"✅ Function App '{function_app_name}' vytvořen.")
+    else:
+        print(f"ℹ️ Function App '{function_app_name}' již existuje.")
+
+
+def upload_zip_to_blob(storage_connection_string, container_name, zip_file_path, storage_account_key, account_name):
+    """
+    Nahraje ZIP soubor do zadaného kontejneru a vygeneruje SAS token pro přístup.
+    Vrací kompletní URL s SAS tokenem.
+    """
+    print("Nahrávám ZIP balíček do blob storage...")
+    blob_service_client = BlobServiceClient.from_connection_string(storage_connection_string)
+    container_client = blob_service_client.get_container_client(container_name)
+    
+    try:
+        container_client.create_container()
+        print(f"✅ Kontejner '{container_name}' vytvořen.")
+    except Exception:
+        print(f"ℹ️ Kontejner '{container_name}' již existuje nebo nelze vytvořit.")
+
+    blob_name = os.path.basename(zip_file_path)
+    blob_client = container_client.get_blob_client(blob_name)
+
+    with open(zip_file_path, "rb") as data:
+        blob_client.upload_blob(data, overwrite=True)
+    print(f"✅ Soubor '{blob_name}' nahrán.")
+
+    # Vygenerujeme SAS token platný 1 den
+    sas_token = generate_blob_sas(
+        account_name=account_name,
+        container_name=container_name,
+        blob_name=blob_name,
+        account_key=storage_account_key,
+        permission=BlobSasPermissions(read=True),
+        expiry=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+    )
+    blob_url_with_sas = f"{blob_client.url}?{sas_token}"
+    print(f"✅ SAS URL vygenerováno: {blob_url_with_sas}")
+    return blob_url_with_sas
+
+
+def update_function_app_package_setting(web_client, rg_name, function_app_name, package_url):
+    """
+    Aktualizuje nastavení Function App tak, aby WEBSITE_RUN_FROM_PACKAGE ukazovalo na danou URL.
+    """
+    print("Aktualizuji aplikacní nastavení Function App...")
+    settings = web_client.web_apps.list_application_settings(rg_name, function_app_name)
+    # Uložíme, že se spouští z balíčku
+    settings.properties["WEBSITE_RUN_FROM_PACKAGE"] = package_url
+    web_client.web_apps.update_application_settings(rg_name, function_app_name, settings)
+    print("✅ Nastavení WEBSITE_RUN_FROM_PACKAGE aktualizováno.")
+
+def create_ai_search_service(search_client, rg_name, search_service_name, location, sku):
+    # Pokusíme se získat již existující službu.
+    try:
+        existing_service = search_client.services.get(rg_name, search_service_name)
+        if existing_service:
+            print(f"ℹ️ AI Search Service '{search_service_name}' již existuje.")
+            return existing_service
+    except HttpResponseError as e:
+        # Pokud obdržíte ServiceNameUnavailable při pokusu o získání, znamená to, že název je již použit.
+        if "ServiceNameUnavailable" in str(e):
+            print(f"ℹ️ AI Search Service '{search_service_name}' již existuje nebo je název rezervován.")
+            return None
+        # U ostatních chyb je vhodné vypsat chybovou hlášku nebo znovu vyvolat výjimku.
+        print(f"Chyba při ověřování existence služby: {e}")
+
+    # Pokus o vytvoření služby
+    try:
+        poller = search_client.services.begin_create_or_update(rg_name, search_service_name, {
+            "location": location,
+            "sku": {"name": sku},
+            "replica_count": 1,
+            "partition_count": 1,
+            "hosting_mode": "default",
+            "semantic_search": "standard"
+        })
+        poller.result()
+        print(f"✅ AI Search Service '{search_service_name}' vytvořen.")
+    except HttpResponseError as e:
+        if "ServiceNameUnavailable" in str(e):
+            print(f"ℹ️ AI Search Service '{search_service_name}' již existuje nebo je název rezervován (chyba: {e}).")
+        else:
+            raise
+
+
+def get_search_admin_key(subscription_id, resource_group, search_service_name, credentials):
+    """
+    Získá admin klíč pro Azure Cognitive Search.
+    """
+    search_client = SearchManagementClient(credentials, subscription_id)
+    admin_keys = search_client.admin_keys.get(resource_group, search_service_name)
+    # Obvykle se využívá primary_key, ale v případě potřeby můžete využít secondary_key.
+    return admin_keys.primary_key
+
+def get_cognitive_services_key(subscription_id, resource_group, cognitive_account_name, credentials):
+    """
+    Získá klíč pro Cognitive Services.
+    """
+    cog_client = CognitiveServicesManagementClient(credentials, subscription_id)
+    keys = cog_client.accounts.list_keys(resource_group, cognitive_account_name)
+    print(f"🔑 Cognitive Services keys: {keys}")
+    return keys.key1  # Získání primárního klíče
+
+def create_or_get_cognitive_account(subscription_id, resource_group, account_name, location, sku_name, kind, tags=None):
+    """
+    Zkontroluje, zda Cognitive Services účet s daným jménem existuje v resource group.
+    Pokud existuje, vrátí ho; pokud ne, vytvoří nový účet.
+    
+    :param subscription_id: ID předplatného v Azure.
+    :param resource_group: Název resource group, ve které se účet nachází.
+    :param account_name: Unikátní název Cognitive Services účtu.
+    :param location: Region, kde má být účet vytvořen (např. "westeurope").
+    :param sku_name: Název SKU (např. "S0", "F0", apod.).
+    :param kind: Typ služby (např. "CognitiveServices", "Face", "TextAnalytics" apod.).
+    :param tags: Nepovinné značky jako dict.
+    :return: Instance CognitiveServicesAccount.
+    """
+    credential = DefaultAzureCredential()
+    cog_client = CognitiveServicesManagementClient(credential, subscription_id)
+    
+    # Nejprve se pokusíme získat účet, pokud již existuje.
+    try:
+        account = cog_client.accounts.get(resource_group, account_name)
+        print(f"ℹ️ Cognitive Services účet '{account_name}' již existuje.")
+        return account
+    except Exception as e:
+        # Při pokusu o získání neexistujícího účtu bude vyvolána chyba; pokračujeme ve vytvoření.
+        print(f"ℹ️ Cognitive Services účet '{account_name}' nebyl nalezen, bude vytvořen. Detaily chyby (ignorujeme): {e}")
+
+    # Konfigurace parametrů nového účtu
+    params = CognitiveServicesAccount(
+        location=location,
+        sku=Sku(name=sku_name),
+        kind=kind,
+        properties={},
+        tags=tags
+    )
+    
+    print(f"🚀 Vytvářím Cognitive Services účet '{account_name}'...")
+    poller = cog_client.accounts.begin_create(resource_group, account_name, params)
+    account = poller.result()  # počkáme, dokud není vytvořen
+    print(f"✅ Cognitive Services účet '{account_name}' byl úspěšně vytvořen.")
+    return account
+
+def create_or_update_skillset_with_chunking(search_service_name, admin_key, skillset_name, cognitive_services_key):
+    """
+    Vytvoří nebo aktualizuje skillset v Azure Cognitive Search, který obsahuje SplitSkill pro chunking textu.
+    
+    Parametry:
+      - search_service_name: Název Vaší Search Service (bez domény, např. "semanticsearchinfra2")
+      - admin_key: Administrátorský (API) klíč pro Search Service
+      - skillset_name: Unikátní název vytvářeného skillsetu
+      - cognitive_services_key: Klíč ke Cognitive Services, který se použije pro vyvolání skillů
+    """
+    api_version = "2020-06-30"
+    url = f"https://{search_service_name}.search.windows.net/skillsets/{skillset_name}?api-version={api_version}"
+    
+    headers = {
+        "Content-Type": "application/json",
+        "api-key": admin_key
+    }
+    
+    # Definice skillsetu s použitím SplitSkill – slouží k rozdělení textu (chunking)
+    skillset_definition = {
+        "name": skillset_name,
+        "description": "Skillset s funkcí chunkingu textu (rozštěpování na menší části)",
+        "skills": [
+            {
+                "@odata.type": "#Microsoft.Skills.Text.SplitSkill",
+                "name": "textChunker",
+                "description": "Rozděluje text na chunky",
+                "context": "/document/normalized_text",
+                "inputs": [
+                    {"name": "text", "source": "/document/normalized_text"}
+                ],
+                "outputs": [
+                    {"name": "textItems", "targetName": "chunks"}
+                ],
+                "defaultLanguageCode": "en",
+                # "maximumTokenCount": 500  # určuje maximální velikost chunku – přizpůsobte dle potřeby
+            }
+        ],
+        "cognitiveServices": {
+            "@odata.type": "#Microsoft.Azure.Search.CognitiveServicesByKey",
+            "description": "Klíč pro Cognitive Services spojených s vyhledáváním",
+            "key": cognitive_services_key
+        }
+    }
+    
+    response = requests.put(url, headers=headers, json=skillset_definition)
+    if response.status_code in [200, 201]:
+        print("✅ Skillset s chunkingem byl úspěšně vytvořen/aktualizován.")
+    else:
+        print(f"❌ Chyba při vytváření/aktualizaci skillsetu: {response.status_code} - {response.text}")
+
+def create_or_update_vector_index(
+        creadentials,
+        search_service_name, 
+        admin_key, 
+        index_name, vector_dimension=768):
+    """
+    Vytvoří nebo aktualizuje index pro vector search.
+    V tomto příkladu obsahuje index:
+      - Klíčové pole 'id'
+      - Standardní textové pole 'content'
+      - Pole 'contentVector' pro ukládání vektorových reprezentací
+    Dále je definována konfigurace vector search s využitím algoritmu HNSW a kosinové podobnosti.
+    
+    Parametry:
+      - search_service_name: Název Search Service (bez domény, např. "semanticsearchinfra24654")
+      - admin_key: Admin klíč získaný z Search Service
+      - index_name: Unikátní název indexu
+      - vector_dimension: Dimenze vektorů (výchozí 768)
+    """
+    
+    endpoint = f"https://{search_service_name}.search.windows.net/"
+    # index_client = SearchIndexClient(endpoint=endpoint, credential=creadentials)    
+    index_client = SearchIndexClient(endpoint=endpoint, credential=AzureKeyCredential(admin_key))
+
+    # Definice polí indexu
+    fields = [
+        SimpleField(name="id", type="Edm.String", key=True, searchable=False),
+        SimpleField(name="document_folder", type="Edm.String", searchable=True),
+        SimpleField(name="document_name", type="Edm.String", searchable=False),
+        SearchableField(name="content", type="Edm.String", searchable=True),
+        # U pole contentVector předáme počet dimenzí a název konfigurace,
+        # přičemž jako typ používáme "Collection(Edm.Single)"
+        SimpleField(name="contentVector", type="Collection(Edm.Single)", dimensions=vector_dimension, searchable=False, vector_search_configuration="vectorConfig1")
+    ]
+    
+    # Vytvoření modelu indexu
+    index = SearchIndex(name=index_name, fields=fields)
+    
+    # Definice konfigurace vektorového vyhledávání jako slovníkového objektu
+    index.vector_search = {
+        "algorithmConfigurations": [
+            {
+                "name": "vectorConfig1",
+                "algorithm": "hnsw",  # Určete použitý algoritmus (např. "hnsw")
+                "parameters": {
+                    "metric": "cosine"  # Nebo jinou metrickou funkci
+                }
+            }
+        ]
+    }    
+    # Vytvoření nebo aktualizace indexu
+    result_index = index_client.create_or_update_index(index)
+    print(f"✅ Vector index '{result_index.name}' byl úspěšně vytvořen/aktualizován.")
+
+
+# ---------------------------
+# Hlavní skript
+# ---------------------------
+def main():
+    # Pokud máte nastavenou proměnnou AZURE_SUBSCRIPTION_ID, použijte ji, nebo nastavte přímo subscription_id
+    # subscription_id = os.environ["AZURE_SUBSCRIPTION_ID"]
+    credentials = DefaultAzureCredential()
+    subscription_client = SubscriptionClient(credentials)
+    subscription = next(subscription_client.subscriptions.list())
+    subscription_id = subscription.subscription_id
+
+    # Konfigurace
+    location = "westeurope"
+    resource_group_name = "AXSemantiSearchResourceGroup"
+    storage_account_name = "axsemanticstorageacc"
+    function_app_name = "semanticsearchfunction"
+    service_plan_name = function_app_name + "-plan"
+    container_name = "function-code"
+    zip_file = "function_package.zip"  # Váš ZIP soubor s funkcí
+    function_code_dir = "./infra/python/azurefunc"  # Zdrojový adresář s kódem funkcí
+
+    cognitive_account_name = "axsemanticcogaccount"
+    search_service_sku = "standard"
+    search_service_name = "semanticsearchinfra24654"
+    vector_index_name = "my_vector_index"
+
+    skillset_name = "my-skillset-with-chunking"
+
+    # Inicializace klientů
+    resource_client = ResourceManagementClient(credentials, subscription_id)
+    storage_client = StorageManagementClient(credentials, subscription_id)
+    web_client = WebSiteManagementClient(credentials, subscription_id)
+    search_client = SearchManagementClient(credentials, subscription_id)
+
+    # Vytvoření Resource Group
+    create_resource_group(resource_client, resource_group_name, location)
+
+    # Vytvoření Storage Account
+    create_storage_account(storage_client, resource_group_name, storage_account_name, location)
+    storage_account_key = get_storage_account_key(storage_client, resource_group_name, storage_account_name)
+    connection_string = f"DefaultEndpointsProtocol=https;AccountName={storage_account_name};AccountKey={storage_account_key};EndpointSuffix=core.windows.net"
+
+
+
+    sku_name = "S0"  # Typ SKU, může být např. S0, F0, atd.
+    kind = "CognitiveServices"  # Typ služby – např. CognitiveServices, Face, TextAnalytics, atd.
+    
+    # Nepovinné: definice značek
+    tags = {"env": "prod", "project": "SemanticSearch"}
+    
+    account = create_or_get_cognitive_account(subscription_id, resource_group_name, cognitive_account_name, location, sku_name, kind, tags)
+    
+    # Nyní můžeme například vypsat získané klíče (admin key)
+    keys = CognitiveServicesManagementClient(DefaultAzureCredential(), subscription_id) \
+            .accounts.list_keys(resource_group_name, cognitive_account_name)
+    print(f"🔑 Cognitive Services primary key: {keys}")
+    cognitive_key = keys.key1  # Získání primárního klíče
+    print(f"🔑 Cognitive Services primary key: {cognitive_key}")
+
+    create_ai_search_service(search_client, resource_group_name, search_service_name, location, search_service_sku)
+
+    search_admin_key = get_search_admin_key(subscription_id, resource_group_name, search_service_name, credentials)
+    print(f"Search Admin Key: {search_admin_key}")
+
+    cognitive_services_key = get_cognitive_services_key(subscription_id, resource_group_name, cognitive_account_name, credentials)
+    print(f"Cognitive Services Key: {cognitive_key}")
+
+    # Vytvoření skillsetu s chunkingem:
+    create_or_update_skillset_with_chunking(
+        search_service_name, search_admin_key, skillset_name, cognitive_services_key)
+
+    # Vytvoření nebo aktualizace vector indexu
+    create_or_update_vector_index(
+        credentials,  # Použijeme DefaultAzureCredential pro autentizaci
+        search_service_name, 
+        search_admin_key, 
+        vector_index_name, 
+        vector_dimension=768
+    )
+
+    # Zipování kódu funkcí
+    zip_function_code(function_code_dir, zip_file)
+
+    # Vytvoření App Service Planu
+    create_app_service_plan(web_client, resource_group_name, service_plan_name, location)
+
+    # Vytvoření nebo aktualizace Function App
+    create_or_update_function_app(web_client, subscription_id, resource_group_name, function_app_name, location,
+                                  service_plan_name, storage_account_name, connection_string)
+
+    # Nahrajeme ZIP do Blob Storage a získáme URL s SAS tokenem
+    package_url = upload_zip_to_blob(connection_string, container_name, zip_file, storage_account_key, storage_account_name)
+
+    # Aktualizujeme nastavení Function App: WEBSITE_RUN_FROM_PACKAGE
+    update_function_app_package_setting(web_client, resource_group_name, function_app_name, package_url)
+
+    print("✅ Nasazení kódu proběhlo úspěšně. Vaše Function App načte kód přímo z balíčku uloženého v Azure Blob Storage.")
+
+
+if __name__ == "__main__":
+    main()
