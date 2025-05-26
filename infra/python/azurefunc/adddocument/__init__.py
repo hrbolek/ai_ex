@@ -28,6 +28,25 @@ def extract_text_from_pdf(blob_data):
         text += page.get_text()
     return text
 
+def split_text_to_chunks(text, max_chunk_size=1000):
+    words = text.split()
+    chunks = []
+    for i in range(0, len(words), max_chunk_size):
+        chunk = " ".join(words[i:i+max_chunk_size])
+        chunks.append(chunk)
+    return chunks
+
+def split_text_to_chunks_with_overlap(text, max_chunk_size=1000, overlap=100):
+    words = text.split()
+    chunks = []
+    start = 0
+    while start < len(words):
+        end = min(start + max_chunk_size, len(words))
+        chunk = " ".join(words[start:end])
+        chunks.append(chunk)
+        start += max_chunk_size - overlap  # posuneme se o méně než max_chunk_size, aby byl překryv
+    return chunks
+
 def generate_embedding(apikey: str, text: str):
     client = OpenAI(apikey)
     response = client.embeddings.create(
@@ -104,20 +123,23 @@ def main(req: HttpRequest) -> func.HttpResponse:
             "Podporovány jsou pouze soubory PDF a DOCX.", status_code=400
         )
     
-    # Generování embeddingu
-    embedding = generate_embedding(ai_api_key, content)
+    # Rozdělení obsahu na chunk
+    chunks = split_text_to_chunks_with_overlap(content, max_chunk_size=1000, overlap=100)
 
-    # Indexování dokumentu do Cognitive Search
-    index_document_to_search(
-        search_service_name, 
-        search_index_name, 
-        search_api_key, 
-        document_id, 
-        content,
-        url=document_url,
-        embedding=embedding
-    )
+    # Indexování chunků zvlášť
+    for idx, chunk_text in enumerate(chunks):
+        embedding = generate_embedding(ai_api_key, chunk_text)
+        chunk_document_id = f"{document_id}_chunk{idx+1}"
+        index_document_to_search(
+            search_service_name, 
+            search_index_name, 
+            search_api_key, 
+            chunk_document_id, 
+            chunk_text,
+            url=document_url,
+            embedding=embedding
+        )
     
     return func.HttpResponse(
-        f"Dokument '{document_id}' byl úspěšně zaindexován.", status_code=200
+        f"Dokument '{document_id}' byl úspěšně rozdělen a zaindexován ve {len(chunks)} částech.", status_code=200
     )
