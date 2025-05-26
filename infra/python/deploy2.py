@@ -310,7 +310,7 @@ def get_skillset(search_service_name, admin_key, skillset_name):
     else:
         print(f"❌ Chyba při získávání skillsetu: {response.status_code} - {response.text}")
 
-def create_or_update_vector_index(credentials, search_service_name, admin_key, index_name, vector_dimension=768):
+def create_or_update_vector_index(credentials, search_service_name, admin_key, index_name, vector_dimension=1536):
     """
     Vytvoří nebo aktualizuje index pro vector search.
     Index obsahuje klíčová pole, textové pole a vektorové pole 'contentVector' s dodatečnými vlastnostmi.
@@ -324,7 +324,7 @@ def create_or_update_vector_index(credentials, search_service_name, admin_key, i
       - search_service_name: Název Search Service (bez domény, např. "semanticsearchinfra24654")
       - admin_key: Admin klíč z Search Service
       - index_name: Unikátní jméno indexu
-      - vector_dimension: Dimenze vektorů (výchozí 768)
+      - vector_dimension: Dimenze vektorů (výchozí 1536, pro OpenAI embeddingy)
     """
     from azure.search.documents.indexes import SearchIndexClient
     from azure.core.credentials import AzureKeyCredential
@@ -450,7 +450,7 @@ def main():
     get_skillset(search_service_name, search_admin_key, skillset_name)
 
     # Vytvoření nebo aktualizace vector indexu
-    create_or_update_vector_index(credentials, search_service_name, search_admin_key, vector_index_name, vector_dimension=768)
+    create_or_update_vector_index(credentials, search_service_name, search_admin_key, vector_index_name, vector_dimension=1536)
 
     # Zipování kódu funkcí
     zip_function_code(function_code_dir, zip_file)
