@@ -28,6 +28,13 @@ def extract_text_from_pdf(blob_data):
         text += page.get_text()
     return text
 
+
+filetransform = {
+    "docx": extract_text_from_docx,
+    "pdf": extract_text_from_pdf
+}
+
+
 def split_text_to_chunks(text, max_chunk_size=1000):
     words = text.split()
     chunks = []
@@ -114,14 +121,13 @@ def main(req: HttpRequest) -> func.HttpResponse:
         )
     
     # Extrakce textu z dokumentu na základě typu souboru
-    if document_id.endswith(".docx"):
-        content = extract_text_from_docx(file_data)
-    elif document_id.endswith(".pdf"):
-        content = extract_text_from_pdf(file_data)
-    else:
+    file_extension = document_id.split('.')[-1].lower()
+    if file_extension not in filetransform:
         return func.HttpResponse(
-            "Podporovány jsou pouze soubory PDF a DOCX.", status_code=400
+            f"Podporovány jsou pouze soubory {filetransform.keys().join(", ")}.", status_code=400
         )
+    extract_text_function = filetransform[file_extension]
+    content = extract_text_function(file_data)
     
     # Rozdělení obsahu na chunk
     chunks = split_text_to_chunks_with_overlap(content, max_chunk_size=1000, overlap=100)
