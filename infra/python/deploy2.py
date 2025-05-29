@@ -187,7 +187,8 @@ def create_ai_search_service(search_client, rg_name, search_service_name, locati
             "replica_count": 1,
             "partition_count": 1,
             "hosting_mode": "default",
-            "semantic_search": "standard"
+            # "semantic_search": "standard"
+            "semantic_search": True
         })
         poller.result()
         print(f"✅ AI Search Service '{search_service_name}' vytvořen.")
@@ -385,25 +386,91 @@ def create_or_update_vector_index(credentials, search_service_name, admin_key, i
     print(f"✅ Vector index '{result_index.name}' byl úspěšně vytvořen/aktualizován.")
 
 
-def create_or_update_openai_model_deployment(cognitive_account_endpoint, model_deployment_name, model_name):
-    """
-    Vytvoří nebo aktualizuje deployment OpenAI modelu v rámci Cognitive Services.
-    (Pozn.: V praxi toto obvykle provedete přes Azure Portal, CLI nebo ARM template.
-    Tady je návrh pro budoucí automatizaci, pokud Azure SDK tuto funkcionalitu podporuje.)
-    """
-    credential = DefaultAzureCredential()
-    client = OpenAIClient(cognitive_account_endpoint, credential)
+# def create_or_update_openai_model_deployment(cognitive_account_endpoint, model_deployment_name, model_name):
+#     """
+#     Vytvoří nebo aktualizuje deployment OpenAI modelu v rámci Cognitive Services.
+#     (Pozn.: V praxi toto obvykle provedete přes Azure Portal, CLI nebo ARM template.
+#     Tady je návrh pro budoucí automatizaci, pokud Azure SDK tuto funkcionalitu podporuje.)
+#     """
+#     credential = DefaultAzureCredential()
+#     client = OpenAIClient(cognitive_account_endpoint, credential)
 
-    # Zde je pouze návrh, protože SDK nemusí mít metodu pro deployment vytváření přímo.
-    # V případě potřeby použij ARM template nebo Azure CLI k nasazení modelů.
+#     # Zde je pouze návrh, protože SDK nemusí mít metodu pro deployment vytváření přímo.
+#     # V případě potřeby použij ARM template nebo Azure CLI k nasazení modelů.
 
-    # Pokud by SDK umožňovala, mohl by to být nějaký kód:
-    # client.model_deployments.create_or_update(
-    #     deployment_name=model_deployment_name,
-    #     model_name=model_name
+#     # Pokud by SDK umožňovala, mohl by to být nějaký kód:
+#     # client.model_deployments.create_or_update(
+#     #     deployment_name=model_deployment_name,
+#     #     model_name=model_name
+#     # )
+#     print(f"Nasazení modelu '{model_name}' jako deployment '{model_deployment_name}' - implementace podle SDK nebo ARM.")
+
+
+from azure.identity import DefaultAzureCredential
+from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient
+from azure.mgmt.cognitiveservices.models import (
+    Deployment,
+    DeploymentProperties,
+    DeploymentModel,
+    Sku
+)
+
+def create_or_update_openai_model_deployment(
+    subscription_id: str,
+    resource_group_name: str,
+    cognitive_account_name: str,
+    model_deployment_name: str,
+    model_name: str,
+    sku_name: str = "S0",
+    capacity: int = 1,
+    credentials = None
+):
+    """
+    Vytvoří nebo aktualizuje Azure OpenAI model deployment
+    bez použití deprecated scale_settings – kapacitu nastavíme přímo v Sku.
+    """
+
+    mgmt_client = CognitiveServicesManagementClient(credentials, subscription_id)
+
+    # Nasazení s kapacitou přímo ve Sku
+    deployment_params = Deployment(
+        sku=Sku(name=sku_name, capacity=capacity),  # zde místo scale_settings
+        properties=DeploymentProperties(
+            model=DeploymentModel(name=model_name)
+        )
+    )
+
+    print(f"➡️ Nasazuji model '{model_name}' jako deployment '{model_deployment_name}'...")
+    poller = mgmt_client.deployments.begin_create_or_update(
+        resource_group_name=resource_group_name,
+        account_name=cognitive_account_name,
+        deployment_name=model_deployment_name,
+        deployment=deployment_params
+    )
+    result = poller.result()
+    state = result.properties.provisioning_state
+    print(f"✅ Deployment '{model_deployment_name}' provisioning state: {state}")
+
+
+    # Example usage:
+    # create_or_update_openai_model_deployment(
+    #     subscription_id,
+    #     resource_group_name,
+    #     cognitive_account_name,
+    #     "embedding-deployment",
+    #     "text-embedding-ada-002",
+    #     sku_name="Standard",
+    #     capacity=1
     # )
-    print(f"Nasazení modelu '{model_name}' jako deployment '{model_deployment_name}' - implementace podle SDK nebo ARM.")
-
+    # create_or_update_openai_model_deployment(
+    #     subscription_id,
+    #     resource_group_name,
+    #     cognitive_account_name,
+    #     "summarization-deployment",
+    #     "gpt-4o-mini",
+    #     sku_name="Standard",
+    #     capacity=1
+    # )
 
 # ---------------------------
 # Hlavní skript
@@ -445,7 +512,8 @@ def main():
     connection_string = f"DefaultEndpointsProtocol=https;AccountName={storage_account_name};AccountKey={storage_account_key};EndpointSuffix=core.windows.net"
 
     sku_name = "S0"          
-    kind = "CognitiveServices"  
+    # kind = "CognitiveServices"  
+    kind = "OpenAI"  
     tags = {"env": "prod", "project": "SemanticSearch"}
     
     account = create_or_get_cognitive_account(subscription_id, resource_group_name, cognitive_account_name, location, sku_name, kind, tags)
@@ -492,27 +560,42 @@ def main():
 
     print("✅ Nasazení kódu proběhlo úspěšně. Vaše Function App načte kód přímo z balíčku uloženého v Azure Blob Storage.")
 
-
-    cognitive_account = create_or_get_cognitive_account(
-        subscription_id, resource_group_name,
-        cognitive_account_name, location,
-        sku_name, kind, tags
-    )
-
-    cognitive_account_endpoint = cognitive_account.properties.endpoint
+    # cognitive_account_endpoint = account.properties.endpoint
 
     # Přidat nasazení modelů (pouze jako logická ukázka, implementace může být přes CLI/Portal)
-    create_or_update_openai_model_deployment(
-        cognitive_account_endpoint,
-        model_deployment_name="embedding-deployment",
-        model_name="text-embedding-ada-002"
-    )
 
     create_or_update_openai_model_deployment(
-        cognitive_account_endpoint,
-        model_deployment_name="summarization-deployment",
-        model_name="gpt-4o-mini"
+        subscription_id,
+        resource_group_name,
+        cognitive_account_name,
+        "embedding-deployment",
+        "text-embedding-ada-002",
+        sku_name="S0",
+        capacity=1,
+        credentials=credentials
     )
+    create_or_update_openai_model_deployment(
+        subscription_id,
+        resource_group_name,
+        cognitive_account_name,
+        "summarization-deployment",
+        "gpt-4o-mini",
+        sku_name="S0",
+        capacity=1,
+        credentials=credentials
+    )
+
+    # create_or_update_openai_model_deployment(
+    #     cognitive_account_endpoint,
+    #     model_deployment_name="embedding-deployment",
+    #     model_name="text-embedding-ada-002"
+    # )
+
+    # create_or_update_openai_model_deployment(
+    #     cognitive_account_endpoint,
+    #     model_deployment_name="summarization-deployment",
+    #     model_name="gpt-4o-mini"
+    # )
 
 if __name__ == "__main__":
     main()
