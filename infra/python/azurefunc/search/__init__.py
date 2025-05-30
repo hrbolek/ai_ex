@@ -19,6 +19,36 @@ def generate_query_vector(query: str):
     embedding = response['data'][0]['embedding']
     return embedding
 
+from azure.ai.inference import EmbeddingsClient
+from azure.core.credentials import AzureKeyCredential
+
+# Upravte podle názvu vašeho Cognitive OpenAI účtu:
+COGNITIVE_ACCOUNT_NAME = "axsemanticcogaccount0602"
+# Stejný název deploymentu, který jste vytvořili skriptem
+EMBEDDING_DEPLOYMENT_NAME = "embedding-deployment"
+
+def generate_embedding(apikey: str, text: str) -> list[float]:
+    """
+    Vygeneruje embedding pro zadaný text použitím Azure AI Inference (preview SDK),
+    bez závislosti na balíčku openai-python.
+    
+    - apikey: primární klíč (key1) vašeho Cognitive OpenAI účtu.
+    - text:   vstupní řetězec, pro který chcete embedding.
+    
+    Vrací: list plovoucích čísel reprezentující embedding.
+    """
+    endpoint = f"https://{COGNITIVE_ACCOUNT_NAME}.openai.azure.com"
+    # Vytvoříme klienta pro embedding
+    client = EmbeddingsClient(
+        endpoint=endpoint,
+        credential=AzureKeyCredential(apikey),
+        model=EMBEDDING_DEPLOYMENT_NAME
+    )
+    # Pošleme jeden řetězec
+    result = client.embed(input=[text])
+    # Výsledek je objekt s .data, kde každá položka má .embedding
+    return result.data[0].embedding
+
 def search_documents(query: str, search_service_name, index_name, search_api_key):
     """
     Vyhledává dokumenty v Azure Cognitive Search pomocí vektorového dotazu.
@@ -26,7 +56,7 @@ def search_documents(query: str, search_service_name, index_name, search_api_key
     endpoint = f"https://{search_service_name}.search.windows.net"
     client = SearchClient(endpoint=endpoint, index_name=index_name, credential=AzureKeyCredential(search_api_key))
 
-    query_vector = generate_query_vector(query)
+    query_vector = generate_embedding(key, query)
 
     results = client.search(
         search_text="*",  # nutné pro Azure Search, i když používáme vektor

@@ -1,8 +1,6 @@
 import os
 import docx
 import fitz  # PyMuPDF pro PDF
-from openai import OpenAI
-
 import azure.functions as func
 
 from azure.search.documents import SearchClient
@@ -54,14 +52,35 @@ def split_text_to_chunks_with_overlap(text, max_chunk_size=1000, overlap=100):
         start += max_chunk_size - overlap  # posuneme se o méně než max_chunk_size, aby byl překryv
     return chunks
 
-def generate_embedding(apikey: str, text: str):
-    client = OpenAI(apikey)
-    response = client.embeddings.create(
-        input=text,
-        model="text-embedding-ada-002"
+from azure.ai.inference import EmbeddingsClient
+from azure.core.credentials import AzureKeyCredential
+
+# Upravte podle názvu vašeho Cognitive OpenAI účtu:
+COGNITIVE_ACCOUNT_NAME = "axsemanticcogaccount0602"
+# Stejný název deploymentu, který jste vytvořili skriptem
+EMBEDDING_DEPLOYMENT_NAME = "embedding-deployment"
+
+def generate_embedding(apikey: str, text: str) -> list[float]:
+    """
+    Vygeneruje embedding pro zadaný text použitím Azure AI Inference (preview SDK),
+    bez závislosti na balíčku openai-python.
+    
+    - apikey: primární klíč (key1) vašeho Cognitive OpenAI účtu.
+    - text:   vstupní řetězec, pro který chcete embedding.
+    
+    Vrací: list plovoucích čísel reprezentující embedding.
+    """
+    endpoint = f"https://{COGNITIVE_ACCOUNT_NAME}.openai.azure.com"
+    # Vytvoříme klienta pro embedding
+    client = EmbeddingsClient(
+        endpoint=endpoint,
+        credential=AzureKeyCredential(apikey),
+        model=EMBEDDING_DEPLOYMENT_NAME
     )
-    embedding_vector = response.data[0].embedding
-    return embedding_vector
+    # Pošleme jeden řetězec
+    result = client.embed(input=[text])
+    # Výsledek je objekt s .data, kde každá položka má .embedding
+    return result.data[0].embedding
 
 # Funkce pro indexování dokumentu do Azure Cognitive Search
 def index_document_to_search(
