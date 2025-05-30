@@ -1,88 +1,55 @@
 import os
+import json
+import logging
+
 import azure.functions as func
-import openai
 
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
+from azure.ai.inference import EmbeddingsClient, ChatCompletionsClient
 
-# Inicializace OpenAI klíče z prostředí
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# --- HELPERS -------------------------------------------------
 
-def generate_query_vector(query: str):
+def get_env(var_name: str, required: bool = True) -> str:
+    """Načte proměnnou z prostředí, případně vyhodí ValueError."""
+    val = os.getenv(var_name)
+    if required and not val:
+        raise ValueError(f"Chybí nastavení prostředí: {var_name}")
+    return val
+
+def generate_embedding(texts: list[str], api_key: str) -> list[list[float]]:
     """
-    Generuje embedding vektor pro dotaz pomocí OpenAI modelu.
+    Vygeneruje embeddingy pomocí Azure AI Inference.
+    texts: seznam řetězců
     """
-    response = openai.Embedding.create(
-        model="text-embedding-ada-002",
-        input=query
-    )
-    embedding = response['data'][0]['embedding']
-    return embedding
+    account = get_env("AZURE_COGNITIVE_ACCOUNT_NAME")
+    deployment = get_env("AZURE_EMBEDDING_DEPLOYMENT_NAME")
+    endpoint = f"https://{account}.openai.azure.com"
 
-from azure.ai.inference import EmbeddingsClient
-from azure.core.credentials import AzureKeyCredential
-
-# Upravte podle názvu vašeho Cognitive OpenAI účtu:
-COGNITIVE_ACCOUNT_NAME = "axsemanticcogaccount0602"
-# Stejný název deploymentu, který jste vytvořili skriptem
-EMBEDDING_DEPLOYMENT_NAME = "embedding-deployment"
-
-def generate_embedding(apikey: str, text: str) -> list[float]:
-    """
-    Vygeneruje embedding pro zadaný text použitím Azure AI Inference (preview SDK),
-    bez závislosti na balíčku openai-python.
-    
-    - apikey: primární klíč (key1) vašeho Cognitive OpenAI účtu.
-    - text:   vstupní řetězec, pro který chcete embedding.
-    
-    Vrací: list plovoucích čísel reprezentující embedding.
-    """
-    endpoint = f"https://{COGNITIVE_ACCOUNT_NAME}.openai.azure.com"
-    # Vytvoříme klienta pro embedding
     client = EmbeddingsClient(
         endpoint=endpoint,
-        credential=AzureKeyCredential(apikey),
-        model=EMBEDDING_DEPLOYMENT_NAME
+        credential=AzureKeyCredential(api_key),
+        model=deployment
     )
-    # Pošleme jeden řetězec
-    result = client.embed(input=[text])
-    # Výsledek je objekt s .data, kde každá položka má .embedding
-    return result.data[0].embedding
+    resp = client.embed(input=texts)
+    return [item.embedding for item in resp.data]
 
-def search_documents(query: str, search_service_name, index_name, search_api_key):
+def search_by_vector(
+    query_vector: list[float],
+    service_name: str,
+    index_name: str,
+    api_key: str,
+    top: int = 5
+) -> list[dict]:
     """
-    Vyhledává dokumenty v Azure Cognitive Search pomocí vektorového dotazu.
+    Provede vektorové vyhledávání nad indexem.
     """
-    endpoint = f"https://{search_service_name}.search.windows.net"
-    client = SearchClient(endpoint=endpoint, index_name=index_name, credential=AzureKeyCredential(search_api_key))
-
-    query_vector = generate_embedding(key, query)
-
-    results = client.search(
-        search_text="*",  # nutné pro Azure Search, i když používáme vektor
-        vector={
-            "value": query_vector,
-            "fields": "contentVector",  # název pole s embeddingem v indexu
-            "k": 10
-        }
+    endpoint = f"https://{service_name}.search.windows.net"
+    client = SearchClient(
+        endpoint=endpoint,
+        index_name=index_name,
+        credential=AzureKeyCredential(api_key)
     )
-
-    documents = []
-    for result in results:
-        documents.append({
-            "id": result.get("id"),
-            "document_name": result.get("fileName") or result.get("document_name"),
-            "document_folder": result.get("folderName") or result.get("document_folder"),
-            "url": result.get("url"),
-            "score": result.get("@search.score")
-        })
-
-    return documents
-
-
-def search_documents_for_LLM(query_vector, search_service_name, index_name, search_api_key, top=5):
-    endpoint = f"https://{search_service_name}.search.windows.net"
-    client = SearchClient(endpoint=endpoint, index_name=index_name, credential=AzureKeyCredential(search_api_key))
     results = client.search(
         search_text="*",
         vector={
@@ -91,14 +58,57 @@ def search_documents_for_LLM(query_vector, search_service_name, index_name, sear
             "k": top
         }
     )
-    # Převod výsledků na seznam dokumentů
     docs = []
     for r in results:
         docs.append({
-            "content": r.get("content", ""),
-            "url": r.get("url", "")
+            "id":              r.get("id"),
+            "content":         r.get("content", ""),
+            "url":             r.get("url"),
+            "score":           r.get("@search.score"),
+            # případně další metadata:
+            # "document_name":  r.get("document_name"),
+            # "document_folder":r.get("document_folder"),
         })
     return docs
+
+def generate_summary(
+    docs: list[dict],
+    query: str,
+    api_key: str
+) -> str:
+    """
+    Vygeneruje souhrn s odkazy na zdroje pomocí Azure AI Inference Chat.
+    """
+    account = get_env("AZURE_COGNITIVE_ACCOUNT_NAME")
+    deployment = get_env("AZURE_CHAT_DEPLOYMENT_NAME", required=False) or "summarization-deployment"
+    endpoint = f"https://{account}.openai.azure.com"
+    client = ChatCompletionsClient(
+        endpoint=endpoint,
+        credential=AzureKeyCredential(api_key),
+        model=deployment
+    )
+
+    # Sestavíme prompt
+    context = "\n\n".join(
+        f"[{i+1}] {d['content']}\nSource: {d['url']}"
+        for i, d in enumerate(docs)
+    )
+    prompt = (
+        f"Na základě následujících textů odpověz na dotaz:\n{query}\n\n"
+        f"Texty:\n{context}\n\n"
+        "Ve své odpovědi odkáž na zdroje [1], [2], ... a na konci uveď jejich seznam s URL."
+    )
+
+    resp = client.complete(
+        messages=[
+            {"role": "system", "content": "Jsi nápomocný asistent, cituj zdroje."},
+            {"role": "user",   "content": prompt}
+        ],
+        temperature=0.3,
+        max_tokens=500
+    )
+    return resp.choices[0].message.content
+
 
 def check_user_access_to_document(user_token: str, document_url: str) -> bool:
     """
@@ -132,79 +142,53 @@ def find_additional_accessible_documents(user_token: str, max_count: int = 10) -
     # TODO: Vrátit max_count dokumentů
     return []  # prozatím prázdný seznam (dummy)
 
-def summarize_documents_with_sources(documents, query):
-    # Sestav prompt se zdroji, každý dokument označíme číslem
-    context_parts = []
-    for i, doc in enumerate(documents, start=1):
-        context_parts.append(f"[{i}] {doc['content']}\nSource: {doc['url']}")
-    context = "\n\n".join(context_parts)
-
-    prompt = (
-        f"Na základě následujících textů odpověz na dotaz:\n{query}\n\n"
-        f"Texty:\n{context}\n\n"
-        "Prosím, ve své odpovědi odkaž na zdroje pomocí číselných odkazů [1], [2], ... "
-        "a na konci odpovědi uváděj seznam těchto zdrojů s URL."
-    )
-
-    response = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "Jsi asistent poskytující odpovědi s odkazy na zdroje."},
-            {"role": "user", "content": prompt}
-        ],
-        max_tokens=500,
-        temperature=0.3
-    )
-    return response.choices[0].message.content
+# --- AZURE FUNCTION ------------------------------------------
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
-    query = req.params.get('q')
-    if not query:
-        try:
-            req_body = req.get_json()
-        except ValueError:
-            return func.HttpResponse("Please provide a search query parameter 'q'.", status_code=400)
-        else:
-            query = req_body.get('q')
-
-    if not query:
-        return func.HttpResponse("Missing search query parameter 'q'.", status_code=400)
-
-    # Načtení konfiguračních hodnot z prostředí
-    search_service_name = os.getenv("AZURE_SEARCH_SERVICE_NAME")
-    search_index_name = os.getenv("AZURE_SEARCH_INDEX_NAME")
-    search_api_key = os.getenv("AZURE_SEARCH_API_KEY")
-
-    if not all([search_service_name, search_index_name, search_api_key]):
-        return func.HttpResponse("Search service configuration is missing.", status_code=500)
-
     try:
-        query_vector = generate_query_vector(query)
-        docs = search_documents_for_LLM(query_vector, search_service_name, search_index_name, search_api_key)
+        # načtení konfigurace
+        search_service = get_env("AZURE_SEARCH_SERVICE_NAME")
+        search_index   = get_env("AZURE_SEARCH_INDEX_NAME")
+        search_api_key = get_env("AZURE_SEARCH_API_KEY")
+        ai_api_key     = get_env("OPENAI_API_KEY")
 
-        user_token = None  # Zde by měl být získán token uživatele, např. z hlavičky Authorization
-        missing_docs = 0
-        for doc in docs:
-            has_access = check_user_access_to_document(user_token, doc.get("url"))
-            if not has_access:
-                doc["content"] = "Access denied to this document."
-                doc["enabled"] = False
-                missing_docs += 1
+        # query param
+        query = req.params.get("q") or (req.get_json(silent=True) or {}).get("q")
+        if not query:
+            return func.HttpResponse(
+                "Chybí parametr 'q' (search query).",
+                status_code=400
+            )
 
-        if missing_docs > 0:
-            additional_docs = find_additional_accessible_documents(user_token)
-            # Zpracuj další logiku...
-            docs.extend(additional_docs)
+        # 1) embedding dotazu
+        vec = generate_embedding([query], ai_api_key)[0]
 
+        # 2) vyhledání top dokumentů
+        docs = search_by_vector(vec, search_service, search_index, search_api_key, top=5)
 
-        summary = summarize_documents_with_sources(docs, query)
-        result = {
-            "query": query,
-            "summary": summary,
-            # "sources": [doc["url"] for doc in docs],
+        # 3) filtrování podle přístupu uživatele (zatím dummy)
+        # TODO: implementovat reálnou kontrolu Entra ID
+        for d in docs:
+            d["access"] = True
+
+        # 4) generování souhrnu s odkazy
+        summary = generate_summary(docs, query, ai_api_key)
+
+        # 5) výstup JSON
+        payload = {
+            "query":    query,
+            "summary":  summary,
             "documents": docs
         }
-        import json
-        return func.HttpResponse(json.dumps(result, ensure_ascii=False), mimetype="application/json")
+        return func.HttpResponse(
+            json.dumps(payload, ensure_ascii=False),
+            mimetype="application/json",
+            status_code=200
+        )
+
+    except ValueError as ve:
+        logging.warning(str(ve))
+        return func.HttpResponse(str(ve), status_code=400)
     except Exception as e:
-        return func.HttpResponse(f"Search failed: {str(e)}", status_code=500)
+        logging.exception(e)
+        return func.HttpResponse("Internal server error.", status_code=500)

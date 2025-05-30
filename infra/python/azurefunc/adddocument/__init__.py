@@ -1,170 +1,151 @@
 import os
-import docx
-import fitz  # PyMuPDF pro PDF
+import io
+import logging
+
 import azure.functions as func
+import docx
+import fitz  # PyMuPDF
 
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
-from azure.identity import DefaultAzureCredential
-from azure.storage.blob import BlobServiceClient
-import io
-from azure.functions import HttpRequest
+from azure.ai.inference import EmbeddingsClient
 
-# Funkce pro extrakci textu z docx souboru
-def extract_text_from_docx(blob_data):
+# Rozšiřitelné mapování přípon → extrakční funkce
+def extract_text_from_docx(blob_data: bytes) -> str:
     doc = docx.Document(io.BytesIO(blob_data))
-    text = ""
-    for para in doc.paragraphs:
-        text += para.text + "\n"
-    return text
+    return "\n".join(para.text for para in doc.paragraphs)
 
-# Funkce pro extrakci textu z PDF souboru
-def extract_text_from_pdf(blob_data):
-    doc = fitz.open(io.BytesIO(blob_data))
-    text = ""
-    for page in doc:
-        text += page.get_text()
-    return text
+def extract_text_from_pdf(blob_data: bytes) -> str:
+    pdf = fitz.open(stream=blob_data, filetype="pdf")
+    return "".join(page.get_text() for page in pdf)
 
-
-filetransform = {
+FILE_TRANSFORMERS = {
     "docx": extract_text_from_docx,
     "pdf": extract_text_from_pdf
 }
 
-
-def split_text_to_chunks(text, max_chunk_size=1000):
-    words = text.split()
-    chunks = []
-    for i in range(0, len(words), max_chunk_size):
-        chunk = " ".join(words[i:i+max_chunk_size])
-        chunks.append(chunk)
-    return chunks
-
-def split_text_to_chunks_with_overlap(text, max_chunk_size=1000, overlap=100):
+def split_text_to_chunks_with_overlap(text: str,
+                                      max_chunk_size: int = 1000,
+                                      overlap: int = 100) -> list[str]:
     words = text.split()
     chunks = []
     start = 0
     while start < len(words):
         end = min(start + max_chunk_size, len(words))
-        chunk = " ".join(words[start:end])
-        chunks.append(chunk)
-        start += max_chunk_size - overlap  # posuneme se o méně než max_chunk_size, aby byl překryv
+        chunks.append(" ".join(words[start:end]))
+        start += max_chunk_size - overlap
     return chunks
 
-from azure.ai.inference import EmbeddingsClient
-from azure.core.credentials import AzureKeyCredential
-
-# Upravte podle názvu vašeho Cognitive OpenAI účtu:
-COGNITIVE_ACCOUNT_NAME = "axsemanticcogaccount0602"
-# Stejný název deploymentu, který jste vytvořili skriptem
-EMBEDDING_DEPLOYMENT_NAME = "embedding-deployment"
-
-def generate_embedding(apikey: str, text: str) -> list[float]:
+def generate_embedding(api_key: str, texts: list[str]) -> list[list[float]]:
     """
-    Vygeneruje embedding pro zadaný text použitím Azure AI Inference (preview SDK),
-    bez závislosti na balíčku openai-python.
-    
-    - apikey: primární klíč (key1) vašeho Cognitive OpenAI účtu.
-    - text:   vstupní řetězec, pro který chcete embedding.
-    
-    Vrací: list plovoucích čísel reprezentující embedding.
+    Volá Azure AI Inference EmbeddingsClient pro batch textů.
+    Vrací seznam embeddingů (pořadí odpovídá vstupu).
     """
-    endpoint = f"https://{COGNITIVE_ACCOUNT_NAME}.openai.azure.com"
-    # Vytvoříme klienta pro embedding
+    cog_account = os.getenv("AZURE_COGNITIVE_ACCOUNT_NAME", "")
+    if not cog_account:
+        raise ValueError("Chybí proměnná AZURE_COGNITIVE_ACCOUNT_NAME")
+    endpoint = f"https://{cog_account}.openai.azure.com"
+    model_name = os.getenv("AZURE_EMBEDDING_DEPLOYMENT_NAME", "embedding-deployment")
+
     client = EmbeddingsClient(
         endpoint=endpoint,
-        credential=AzureKeyCredential(apikey),
-        model=EMBEDDING_DEPLOYMENT_NAME
+        credential=AzureKeyCredential(api_key),
+        model=model_name
     )
-    # Pošleme jeden řetězec
-    result = client.embed(input=[text])
-    # Výsledek je objekt s .data, kde každá položka má .embedding
-    return result.data[0].embedding
+    response = client.embed(input=texts)
+    # response.data je seznam, každý prvek má .embedding
+    return [item.embedding for item in response.data]
 
-# Funkce pro indexování dokumentu do Azure Cognitive Search
-def index_document_to_search(
-        service_name, 
-        index_name, 
-        api_key, 
-        document_id, 
-        content,
-        url=None,
-        embedding=None
+def index_documents_batch(
+        service_name: str,
+        index_name: str,
+        api_key: str,
+        documents: list[dict]
     ):
     endpoint = f"https://{service_name}.search.windows.net"
-    client = SearchClient(endpoint=endpoint, index_name=index_name, credential=AzureKeyCredential(api_key))
-    
-    # Vytvoření dokumentu pro indexování
-    document = {
-        "id": document_id,
-        "content": content
-    }
-    if url:
-        document["url"] = url    
-    
-    if embedding:
-        document["contentVector"] = embedding
-
-    # Indexování dokumentu
-    client.upload_documents(documents=[document])
-    print(f"✅ Dokument '{document_id}' byl úspěšně zaindexován.")
-
-# Hlavní Azure Function handler pro příjem souboru přes REST API
-def main(req: HttpRequest) -> func.HttpResponse:
-    # Získání připojení k Blob Storage a Cognitive Search z environmentálních proměnných
-    blob_connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
-    search_service_name = os.getenv("AZURE_SEARCH_SERVICE_NAME")
-    search_index_name = os.getenv("AZURE_SEARCH_INDEX_NAME")
-    search_api_key = os.getenv("AZURE_SEARCH_API_KEY")
-    ai_api_key = os.getenv("OPENAI_API_KEY")
-
-    # Inicializace Blob Storage clienta
-    blob_service_client = BlobServiceClient.from_connection_string(blob_connection_string)
-    
-    # Příjem souboru v těle požadavku
-    file = req.files['file']  # Tento soubor je odesílán jako multipart/form-data
-    
-    # Získání obsahu souboru
-    file_data = file.read()
-
-    # Získání názvu souboru (bude použit jako ID dokumentu)
-    document_id = file.filename
-
-    document_url = req.form.get("documentUrl")  # pokud je součástí formuláře
-    # nebo
-    # document_url = req.params.get("documentUrl")  # pokud je v query parametrech
-    if not document_url:
-        return func.HttpResponse(
-            "URL dokumentu není zadána.", status_code=400
-        )
-    
-    # Extrakce textu z dokumentu na základě typu souboru
-    file_extension = document_id.split('.')[-1].lower()
-    if file_extension not in filetransform:
-        return func.HttpResponse(
-            f"Podporovány jsou pouze soubory {filetransform.keys().join(", ")}.", status_code=400
-        )
-    extract_text_function = filetransform[file_extension]
-    content = extract_text_function(file_data)
-    
-    # Rozdělení obsahu na chunk
-    chunks = split_text_to_chunks_with_overlap(content, max_chunk_size=1000, overlap=100)
-
-    # Indexování chunků zvlášť
-    for idx, chunk_text in enumerate(chunks):
-        embedding = generate_embedding(ai_api_key, chunk_text)
-        chunk_document_id = f"{document_id}_chunk{idx+1}"
-        index_document_to_search(
-            search_service_name, 
-            search_index_name, 
-            search_api_key, 
-            chunk_document_id, 
-            chunk_text,
-            url=document_url,
-            embedding=embedding
-        )
-    
-    return func.HttpResponse(
-        f"Dokument '{document_id}' byl úspěšně rozdělen a zaindexován ve {len(chunks)} částech.", status_code=200
+    client = SearchClient(
+        endpoint=endpoint,
+        index_name=index_name,
+        credential=AzureKeyCredential(api_key)
     )
+    result = client.upload_documents(documents)
+    logging.info(f"Upload result: {result}")
+
+def main(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        # načtení konfigurace z env vars
+        search_service  = os.getenv("AZURE_SEARCH_SERVICE_NAME", "")
+        search_index    = os.getenv("AZURE_SEARCH_INDEX_NAME", "")
+        search_api_key  = os.getenv("AZURE_SEARCH_API_KEY", "")
+        ai_api_key      = os.getenv("OPENAI_API_KEY", "")
+
+        if not all([search_service, search_index, search_api_key, ai_api_key]):
+            raise ValueError("Chybí některá z proměnných: "
+                             "AZURE_SEARCH_SERVICE_NAME, AZURE_SEARCH_INDEX_NAME, "
+                             "AZURE_SEARCH_API_KEY nebo OPENAI_API_KEY.")
+
+        # zpracování multipart/form-data
+        if not req.files or "file" not in req.files:
+            return func.HttpResponse(
+                "Očekávám soubor v poli 'file' (multipart/form-data).",
+                status_code=400
+            )
+        uploaded = req.files["file"]
+        blob_data = uploaded.stream.read()
+        filename = uploaded.filename
+
+        # parametr URL dokumentu
+        document_url = req.form.get("documentUrl") or req.params.get("documentUrl")
+        if not document_url:
+            return func.HttpResponse(
+                "Chybí parametr documentUrl (v těle form nebo query).",
+                status_code=400
+            )
+
+        # extrakce textu podle přípony
+        ext = filename.rsplit(".", 1)[-1].lower()
+        if ext not in FILE_TRANSFORMERS:
+            return func.HttpResponse(
+                f"Podporované přípony: {', '.join(FILE_TRANSFORMERS)}",
+                status_code=400
+            )
+        content = FILE_TRANSFORMERS[ext](blob_data)
+
+        # rozdělíme na překrývající se chunk-y
+        chunks = split_text_to_chunks_with_overlap(content)
+        if not chunks:
+            raise ValueError("Extrahovaný text je prázdný.")
+
+        # batch generování embeddingů
+        embeddings = generate_embedding(ai_api_key, chunks)
+
+        # příprava dokumentů pro index
+        docs = []
+        for i, (chunk, emb) in enumerate(zip(chunks, embeddings), start=1):
+            docs.append({
+                "id":        f"{filename}_chunk{i}",
+                "content":   chunk,
+                "url":       document_url,
+                "contentVector": emb
+            })
+
+        # nahrát všechny v jednom batch
+        index_documents_batch(
+            service_name=search_service,
+            index_name=search_index,
+            api_key=search_api_key,
+            documents=docs
+        )
+
+        return func.HttpResponse(
+            f"Dokument '{filename}' rozdělen na {len(chunks)} částí a úspěšně zaindexován.",
+            status_code=200
+        )
+    except ValueError as ve:
+        logging.warning(str(ve))
+        return func.HttpResponse(str(ve), status_code=400)
+    except Exception as ex:
+        logging.exception(ex)
+        return func.HttpResponse(
+            "Internal server error.", status_code=500
+        )
