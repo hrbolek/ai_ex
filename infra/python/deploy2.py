@@ -17,7 +17,6 @@ from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPerm
 from azure.mgmt.search import SearchManagementClient
 from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient
 from azure.mgmt.cognitiveservices.models import Account as CognitiveServicesAccount, Sku
-from azure.ai.openai import OpenAIClient
 
 from azure.search.documents.indexes.models import (
     SearchIndex,
@@ -187,8 +186,7 @@ def create_ai_search_service(search_client, rg_name, search_service_name, locati
             "replica_count": 1,
             "partition_count": 1,
             "hosting_mode": "default",
-            # "semantic_search": "standard"
-            "semantic_search": True
+            "semantic_search": "standard"
         })
         poller.result()
         print(f"✅ AI Search Service '{search_service_name}' vytvořen.")
@@ -199,14 +197,14 @@ def create_ai_search_service(search_client, rg_name, search_service_name, locati
             raise
 
 
-def get_search_admin_key(subscription_id, resource_group, search_service_name, credentials):
-    search_client = SearchManagementClient(credentials, subscription_id)
+def get_search_admin_key(subscription_id, resource_group, search_service_name, credential):
+    search_client = SearchManagementClient(credential, subscription_id)
     admin_keys = search_client.admin_keys.get(resource_group, search_service_name)
     return admin_keys.primary_key
 
 
-def get_cognitive_services_key(subscription_id, resource_group, cognitive_account_name, credentials):
-    cog_client = CognitiveServicesManagementClient(credentials, subscription_id)
+def get_cognitive_services_key(subscription_id, resource_group, cognitive_account_name, credential):
+    cog_client = CognitiveServicesManagementClient(credential, subscription_id)
     keys = cog_client.accounts.list_keys(resource_group, cognitive_account_name)
     print(f"🔑 Cognitive Services keys: {keys}")
     return keys.key1
@@ -288,7 +286,7 @@ def create_or_update_skillset(search_service_name, admin_key, skillset_name, cog
     }
 
     response = requests.put(url, headers=headers, json=skillset_definition)
-    if response.status_code in [200, 201]:
+    if response.status_code in [200, 201, 204]:
         print("✅ Skillset s chunkingem a embeddingy pro vektorové vyhledávání byl úspěšně vytvořen/aktualizován.")
     else:
         print(f"❌ Chyba při vytváření/aktualizaci skillsetu: {response.status_code} - {response.text}")
@@ -312,7 +310,7 @@ def get_skillset(search_service_name, admin_key, skillset_name):
     else:
         print(f"❌ Chyba při získávání skillsetu: {response.status_code} - {response.text}")
 
-def create_or_update_vector_index(credentials, search_service_name, admin_key, index_name, vector_dimension=1536):
+def create_or_update_vector_index(credential, search_service_name, admin_key, index_name, vector_dimension=1536):
     """
     Vytvoří nebo aktualizuje index pro vector search.
     Index obsahuje klíčová pole, textové pole a vektorové pole 'contentVector' s dodatečnými vlastnostmi.
@@ -322,7 +320,7 @@ def create_or_update_vector_index(credentials, search_service_name, admin_key, i
     dodatečné vlastnosti 'dimensions' a 'vectorSearchConfiguration'.
     
     Parametry:
-      - credentials: Credential instance (např. DefaultAzureCredential)
+      - credential: Credential instance (např. DefaultAzureCredential)
       - search_service_name: Název Search Service (bez domény, např. "semanticsearchinfra24654")
       - admin_key: Admin klíč z Search Service
       - index_name: Unikátní jméno indexu
@@ -385,28 +383,6 @@ def create_or_update_vector_index(credentials, search_service_name, admin_key, i
     result_index = index_client.create_or_update_index(index)
     print(f"✅ Vector index '{result_index.name}' byl úspěšně vytvořen/aktualizován.")
 
-
-# def create_or_update_openai_model_deployment(cognitive_account_endpoint, model_deployment_name, model_name):
-#     """
-#     Vytvoří nebo aktualizuje deployment OpenAI modelu v rámci Cognitive Services.
-#     (Pozn.: V praxi toto obvykle provedete přes Azure Portal, CLI nebo ARM template.
-#     Tady je návrh pro budoucí automatizaci, pokud Azure SDK tuto funkcionalitu podporuje.)
-#     """
-#     credential = DefaultAzureCredential()
-#     client = OpenAIClient(cognitive_account_endpoint, credential)
-
-#     # Zde je pouze návrh, protože SDK nemusí mít metodu pro deployment vytváření přímo.
-#     # V případě potřeby použij ARM template nebo Azure CLI k nasazení modelů.
-
-#     # Pokud by SDK umožňovala, mohl by to být nějaký kód:
-#     # client.model_deployments.create_or_update(
-#     #     deployment_name=model_deployment_name,
-#     #     model_name=model_name
-#     # )
-#     print(f"Nasazení modelu '{model_name}' jako deployment '{model_deployment_name}' - implementace podle SDK nebo ARM.")
-
-
-from azure.identity import DefaultAzureCredential
 from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient
 from azure.mgmt.cognitiveservices.models import (
     Deployment,
@@ -421,22 +397,25 @@ def create_or_update_openai_model_deployment(
     cognitive_account_name: str,
     model_deployment_name: str,
     model_name: str,
-    sku_name: str = "S0",
+    sku_name: str = "Standard",
     capacity: int = 1,
-    credentials = None
+    credential = None
 ):
     """
     Vytvoří nebo aktualizuje Azure OpenAI model deployment
     bez použití deprecated scale_settings – kapacitu nastavíme přímo v Sku.
     """
 
-    mgmt_client = CognitiveServicesManagementClient(credentials, subscription_id)
+    mgmt_client = CognitiveServicesManagementClient(credential, subscription_id)
 
     # Nasazení s kapacitou přímo ve Sku
     deployment_params = Deployment(
         sku=Sku(name=sku_name, capacity=capacity),  # zde místo scale_settings
         properties=DeploymentProperties(
-            model=DeploymentModel(name=model_name)
+            model=DeploymentModel(
+                name=model_name,
+                format="OpenAI"
+            )
         )
     )
 
@@ -476,32 +455,33 @@ def create_or_update_openai_model_deployment(
 # Hlavní skript
 # ---------------------------
 def main():
-    credentials = DefaultAzureCredential()
-    subscription_client = SubscriptionClient(credentials)
+    credential = DefaultAzureCredential()
+    subscription_client = SubscriptionClient(credential)
     subscription = next(subscription_client.subscriptions.list())
     subscription_id = subscription.subscription_id
 
     # Konfigurace
-    location = "westeurope"
-    resource_group_name = "AXSemantiSearchResourceGroup"
-    storage_account_name = "axsemanticstorageacc"
-    function_app_name = "semanticsearchfunction"
+    # location = "westeurope"
+    location = "swedencentral"
+    resource_group_name = "AXSemantiSearchResourceGroup0602"
+    storage_account_name = "axsemanticstorageacc0602"
+    function_app_name = "semanticsearchfunction0602"
     service_plan_name = function_app_name + "-plan"
     container_name = "function-code"
     zip_file = "function_package.zip"           # Váš ZIP soubor s funkcí
     function_code_dir = "./infra/python/azurefunc"  # Zdrojový adresář s kódem funkcí
 
-    cognitive_account_name = "axsemanticcogaccount"
+    cognitive_account_name = "axsemanticcogaccount0602"
     search_service_sku = "standard"
-    search_service_name = "semanticsearchinfra24654"
-    vector_index_name = "my_vector_index"
-    skillset_name = "my-skillset-with-chunking"
+    search_service_name = "semanticsearchinfra0602"
+    vector_index_name = "my_vector_index0602"
+    skillset_name = "my-skillset0602"
 
     # Inicializace klientů
-    resource_client = ResourceManagementClient(credentials, subscription_id)
-    storage_client = StorageManagementClient(credentials, subscription_id)
-    web_client = WebSiteManagementClient(credentials, subscription_id)
-    search_client = SearchManagementClient(credentials, subscription_id)
+    resource_client = ResourceManagementClient(credential, subscription_id)
+    storage_client = StorageManagementClient(credential, subscription_id)
+    web_client = WebSiteManagementClient(credential, subscription_id)
+    search_client = SearchManagementClient(credential, subscription_id)
 
     # Vytvoření Resource Group
     create_resource_group(resource_client, resource_group_name, location)
@@ -526,10 +506,10 @@ def main():
 
     create_ai_search_service(search_client, resource_group_name, search_service_name, location, search_service_sku)
 
-    search_admin_key = get_search_admin_key(subscription_id, resource_group_name, search_service_name, credentials)
+    search_admin_key = get_search_admin_key(subscription_id, resource_group_name, search_service_name, credential)
     print(f"Search Admin Key: {search_admin_key}")
 
-    cognitive_services_key = get_cognitive_services_key(subscription_id, resource_group_name, cognitive_account_name, credentials)
+    cognitive_services_key = get_cognitive_services_key(subscription_id, resource_group_name, cognitive_account_name, credential)
     print(f"Cognitive Services Key: YOUR_OPENAI_API_KEY='{cognitive_services_key}'")
     print("tento klic je pro funkce potrebujici pristup k AI Search Service a take pro embedding")
 
@@ -540,7 +520,7 @@ def main():
     get_skillset(search_service_name, search_admin_key, skillset_name)
 
     # Vytvoření nebo aktualizace vector indexu
-    create_or_update_vector_index(credentials, search_service_name, search_admin_key, vector_index_name, vector_dimension=1536)
+    create_or_update_vector_index(credential, search_service_name, search_admin_key, vector_index_name, vector_dimension=1536)
 
     # Zipování kódu funkcí
     zip_function_code(function_code_dir, zip_file)
@@ -570,9 +550,9 @@ def main():
         cognitive_account_name,
         "embedding-deployment",
         "text-embedding-ada-002",
-        sku_name="S0",
+        sku_name="Standard",
         capacity=1,
-        credentials=credentials
+        credential=credential
     )
     create_or_update_openai_model_deployment(
         subscription_id,
@@ -580,9 +560,9 @@ def main():
         cognitive_account_name,
         "summarization-deployment",
         "gpt-4o-mini",
-        sku_name="S0",
+        sku_name="Standard",
         capacity=1,
-        credentials=credentials
+        credential=credential
     )
 
     # create_or_update_openai_model_deployment(
