@@ -25,6 +25,31 @@ from azure.search.documents.indexes.models import (
 )
 from azure.search.documents.indexes import SearchIndexClient
 
+ENV_KEY_NAMES = {
+    "AZURE_COGNITIVE_ACCOUNT_NAME": "AZURE_COGNITIVE_ACCOUNT_NAME",
+    "AZURE_EMBEDDING_DEPLOYMENT_NAME": "AZURE_EMBEDDING_DEPLOYMENT_NAME",
+    "AZURE_SEARCH_SERVICE_NAME": "AZURE_SEARCH_SERVICE_NAME",
+    "AZURE_SEARCH_INDEX_NAME": "AZURE_SEARCH_INDEX_NAME",
+    "AZURE_SEARCH_API_KEY": "AZURE_SEARCH_API_KEY",
+    "OPENAI_API_KEY": "OPENAI_API_KEY",
+    "AZURE_CHAT_DEPLOYMENT_NAME": "AZURE_CHAT_DEPLOYMENT_NAME"
+}
+
+ENV_VARIABLES = {
+
+}
+
+def setenv(key_name, value):
+    proxied_key_name = ENV_KEY_NAMES.get(key_name, None)
+    assert proxied_key_name is not None, f"missing {key_name} in proxied list of key_names"
+    ENV_VARIABLES[proxied_key_name] = value
+    return ENV_VARIABLES
+
+def getenv(key_name, default_value):
+    proxied_key_name = ENV_KEY_NAMES.get(key_name, None)
+    assert proxied_key_name is not None, f"missing {key_name} in proxied list of key_names"
+    result = ENV_VARIABLES.get(proxied_key_name, default_value)
+    return result
 
 # ---------------------------
 # Pomocné funkce
@@ -105,13 +130,21 @@ def create_or_update_function_app(web_client, subscription_id, rg_name, function
         existing = None
 
     if not existing:
+
+        initial_app_settings = [
+            # povinné systémové klíče:
+            {"name": "AzureWebJobsStorage",         "value": connection_string},
+            {"name": "FUNCTIONS_WORKER_RUNTIME",    "value": "python"},
+            {"name": "FUNCTIONS_EXTENSION_VERSION", "value": "~4"}
+        ]
+        # k tomu přidejte všechny klíče z ENV_VARIABLES:
+        for k, v in ENV_VARIABLES.items():
+            initial_app_settings.append({"name": k, "value": v})
+
         site_config = SiteConfig(
             linux_fx_version="PYTHON|3.11",
-            app_settings=[
-                {"name": "AzureWebJobsStorage", "value": connection_string},
-                {"name": "FUNCTIONS_WORKER_RUNTIME", "value": "python"},
-                {"name": "FUNCTIONS_EXTENSION_VERSION", "value": "~4"}
-            ]
+            app_settings=initial_app_settings,
+            # app_settings=[{key: value} for key, value in ENV_VARIABLES.items()]
         )
         server_farm_id = f"/subscriptions/{subscription_id}/resourceGroups/{rg_name}/providers/Microsoft.Web/serverfarms/{plan_name}"
         web_client.web_apps.begin_create_or_update(
@@ -126,7 +159,7 @@ def create_or_update_function_app(web_client, subscription_id, rg_name, function
         ).result()
         print(f"✅ Function App '{function_app_name}' vytvořen.")
     else:
-        print(f"ℹ️ Function App '{function_app_name}' již existuje – aktualizuji app settings…")
+        print(f"ℹ️ Function App '{function_app_name}' již existuje - aktualizuji app settings…")
 
         # 1) Načtení původních settings jako slovník
         existing_config = web_client.web_apps.get_configuration(rg_name, function_app_name)
@@ -137,19 +170,22 @@ def create_or_update_function_app(web_client, subscription_id, rg_name, function
                 original[kv["name"]] = kv["value"]
 
         # 2) Doplníme nebo přepíšeme nová klíč–hodnota
-        original.update({
-            "AzureWebJobsStorage":        connection_string,
-            "FUNCTIONS_WORKER_RUNTIME":   "python",
-            "FUNCTIONS_EXTENSION_VERSION":"~4",
-            # sem přidejte další proměnné, např.:
-            "AZURE_SEARCH_SERVICE_NAME":        "semanticsearchinfra0602",
-            "AZURE_SEARCH_INDEX_NAME":          "my-vector-index",
-            "AZURE_SEARCH_API_KEY":             "<VAŠE_SEARCH_API_KEY>",
-            "AZURE_COGNITIVE_ACCOUNT_NAME":     "axsemanticcogaccount0602",
-            "AZURE_EMBEDDING_DEPLOYMENT_NAME":  "embedding-deployment",
-            "AZURE_CHAT_DEPLOYMENT_NAME":       "summarization-deployment",
-            # "OPENAI_API_KEY":                   "<VAŠE_OPENAI_API_KEY>"
-        })
+        # original.update({
+        #     "AzureWebJobsStorage":        connection_string,
+        #     "FUNCTIONS_WORKER_RUNTIME":   "python",
+        #     "FUNCTIONS_EXTENSION_VERSION":"~4",
+        #     # sem přidejte další proměnné, např.:
+        #     "AZURE_SEARCH_SERVICE_NAME":        "semanticsearchinfra0602",
+        #     "AZURE_SEARCH_INDEX_NAME":          "my-vector-index",
+        #     "AZURE_SEARCH_API_KEY":             "<VAŠE_SEARCH_API_KEY>",
+        #     "AZURE_COGNITIVE_ACCOUNT_NAME":     "axsemanticcogaccount0602",
+        #     "AZURE_EMBEDDING_DEPLOYMENT_NAME":  "embedding-deployment",
+        #     "AZURE_CHAT_DEPLOYMENT_NAME":       "summarization-deployment",
+        #     # "OPENAI_API_KEY":                   "<VAŠE_OPENAI_API_KEY>"
+        # })
+        original.update(
+            ENV_VARIABLES
+        )
 
         # 3) Zabalíme do StringDictionary a zavoláme update_application_settings
         app_settings_payload = StringDictionary(properties=original)
@@ -495,20 +531,28 @@ def main():
 
     # Konfigurace
     # location = "westeurope"
+    postfix = "0602"
     location = "swedencentral"
-    resource_group_name = "AXSemantiSearchResourceGroup0602"
-    storage_account_name = "axsemanticstorageacc0602"
-    function_app_name = "semanticsearchfunction0602"
+    resource_group_name = "AXSemantiSearchResourceGroup" + postfix
+    storage_account_name = "axsemanticstorageacc" + postfix
+    function_app_name = "semanticsearchfunction" + postfix
     service_plan_name = function_app_name + "-plan"
     container_name = "function-code"
     zip_file = "function_package.zip"           # Váš ZIP soubor s funkcí
     function_code_dir = "./infra/python/azurefunc"  # Zdrojový adresář s kódem funkcí
 
-    cognitive_account_name = "axsemanticcogaccount0602"
+    cognitive_account_name = "axsemanticcogaccount" + postfix
     search_service_sku = "standard"
-    search_service_name = "semanticsearchinfra0602"
-    vector_index_name = "my_vector_index0602"
-    skillset_name = "my-skillset0602"
+    search_service_name = "semanticsearchinfra" + postfix
+    vector_index_name = "my_vector_index" + postfix
+    skillset_name = "my-skillset" + postfix
+
+    AZURE_EMBEDDING_DEPLOYMENT_NAME = "text-embedding-ada-002"
+    AZURE_CHAT_DEPLOYMENT_NAME = "summarization-deployment"
+
+    setenv("AZURE_COGNITIVE_ACCOUNT_NAME", cognitive_account_name)
+    setenv("AZURE_SEARCH_SERVICE_NAME", search_service_name)
+    setenv("AZURE_SEARCH_INDEX_NAME", vector_index_name)
 
     # Inicializace klientů
     resource_client = ResourceManagementClient(credential, subscription_id)
@@ -542,6 +586,8 @@ def main():
     search_admin_key = get_search_admin_key(subscription_id, resource_group_name, search_service_name, credential)
     print(f"Search Admin Key: {search_admin_key}")
 
+    setenv("AZURE_SEARCH_API_KEY", search_admin_key)
+
     cognitive_services_key = get_cognitive_services_key(subscription_id, resource_group_name, cognitive_account_name, credential)
     print(f"Cognitive Services Key: YOUR_OPENAI_API_KEY='{cognitive_services_key}'")
     print("tento klic je pro funkce potrebujici pristup k AI Search Service a take pro embedding")
@@ -555,6 +601,36 @@ def main():
     # Vytvoření nebo aktualizace vector indexu
     create_or_update_vector_index(credential, search_service_name, search_admin_key, vector_index_name, vector_dimension=1536)
 
+    setenv("OPENAI_API_KEY", cognitive_services_key)
+
+    create_or_update_openai_model_deployment(
+        subscription_id,
+        resource_group_name,
+        cognitive_account_name,
+        AZURE_EMBEDDING_DEPLOYMENT_NAME,
+        "text-embedding-ada-002",
+        sku_name="Standard",
+        capacity=1,
+        credential=credential
+    )
+    create_or_update_openai_model_deployment(
+        subscription_id,
+        resource_group_name,
+        cognitive_account_name,
+        AZURE_CHAT_DEPLOYMENT_NAME,
+        "gpt-4o-mini",
+        sku_name="Standard",
+        capacity=1,
+        credential=credential
+    )
+
+    setenv("AZURE_EMBEDDING_DEPLOYMENT_NAME", AZURE_EMBEDDING_DEPLOYMENT_NAME)
+    setenv("AZURE_CHAT_DEPLOYMENT_NAME", AZURE_CHAT_DEPLOYMENT_NAME)
+
+    for key in ENV_KEY_NAMES.keys():
+        value = getenv(key, None)
+        assert value is not None, f"{key} environment variable has not been set, azure functions are not configured properly"
+
     # Zipování kódu funkcí
     zip_function_code(function_code_dir, zip_file)
 
@@ -562,8 +638,9 @@ def main():
     create_app_service_plan(web_client, resource_group_name, service_plan_name, location)
 
     # Vytvoření nebo aktualizace Function App
-    create_or_update_function_app(web_client, subscription_id, resource_group_name, function_app_name, location,
-                                  service_plan_name, storage_account_name, connection_string)
+    create_or_update_function_app(
+        web_client, subscription_id, resource_group_name, function_app_name, location,
+        service_plan_name, storage_account_name, connection_string)
 
     # Nahrání ZIP do Blob Storage a získání URL s SAS tokenem
     package_url = upload_zip_to_blob(connection_string, container_name, zip_file, storage_account_key, storage_account_name)
@@ -577,38 +654,6 @@ def main():
 
     # Přidat nasazení modelů (pouze jako logická ukázka, implementace může být přes CLI/Portal)
 
-    create_or_update_openai_model_deployment(
-        subscription_id,
-        resource_group_name,
-        cognitive_account_name,
-        "embedding-deployment",
-        "text-embedding-ada-002",
-        sku_name="Standard",
-        capacity=1,
-        credential=credential
-    )
-    create_or_update_openai_model_deployment(
-        subscription_id,
-        resource_group_name,
-        cognitive_account_name,
-        "summarization-deployment",
-        "gpt-4o-mini",
-        sku_name="Standard",
-        capacity=1,
-        credential=credential
-    )
-
-    # create_or_update_openai_model_deployment(
-    #     cognitive_account_endpoint,
-    #     model_deployment_name="embedding-deployment",
-    #     model_name="text-embedding-ada-002"
-    # )
-
-    # create_or_update_openai_model_deployment(
-    #     cognitive_account_endpoint,
-    #     model_deployment_name="summarization-deployment",
-    #     model_name="gpt-4o-mini"
-    # )
 
 if __name__ == "__main__":
     main()

@@ -10,20 +10,29 @@ from azure.ai.inference import EmbeddingsClient, ChatCompletionsClient
 
 # --- HELPERS -------------------------------------------------
 
-def get_env(var_name: str, required: bool = True) -> str:
-    """Načte proměnnou z prostředí, případně vyhodí ValueError."""
-    val = os.getenv(var_name)
-    if required and not val:
-        raise ValueError(f"Chybí nastavení prostředí: {var_name}")
-    return val
+ENV_KEY_NAMES = {
+    "AZURE_COGNITIVE_ACCOUNT_NAME": "AZURE_COGNITIVE_ACCOUNT_NAME",
+    "AZURE_EMBEDDING_DEPLOYMENT_NAME": "AZURE_EMBEDDING_DEPLOYMENT_NAME",
+    "AZURE_SEARCH_SERVICE_NAME": "AZURE_SEARCH_SERVICE_NAME",
+    "AZURE_SEARCH_INDEX_NAME": "AZURE_SEARCH_INDEX_NAME",
+    "AZURE_SEARCH_API_KEY": "AZURE_SEARCH_API_KEY",
+    "OPENAI_API_KEY": "OPENAI_API_KEY",
+    "AZURE_CHAT_DEPLOYMENT_NAME": "AZURE_CHAT_DEPLOYMENT_NAME"
+}
+
+def getenv(key_name, default_value):
+    proxied_key_name = ENV_KEY_NAMES.get(key_name, None)
+    assert proxied_key_name is not None, f"missing {key_name} in proxied list of key_names"
+    result = os.getenv(proxied_key_name, default_value)
+    return result
 
 def generate_embedding(texts: list[str], api_key: str) -> list[list[float]]:
     """
     Vygeneruje embeddingy pomocí Azure AI Inference.
     texts: seznam řetězců
     """
-    account = get_env("AZURE_COGNITIVE_ACCOUNT_NAME")
-    deployment = get_env("AZURE_EMBEDDING_DEPLOYMENT_NAME")
+    account = getenv("AZURE_COGNITIVE_ACCOUNT_NAME")
+    deployment = getenv("AZURE_EMBEDDING_DEPLOYMENT_NAME")
     endpoint = f"https://{account}.openai.azure.com"
 
     client = EmbeddingsClient(
@@ -79,8 +88,8 @@ def generate_summary(
     """
     Vygeneruje souhrn s odkazy na zdroje pomocí Azure AI Inference Chat.
     """
-    account = get_env("AZURE_COGNITIVE_ACCOUNT_NAME")
-    deployment = get_env("AZURE_CHAT_DEPLOYMENT_NAME", required=False) or "summarization-deployment"
+    account = getenv("AZURE_COGNITIVE_ACCOUNT_NAME")
+    deployment = getenv("AZURE_CHAT_DEPLOYMENT_NAME", required=False) or "summarization-deployment"
     endpoint = f"https://{account}.openai.azure.com"
     client = ChatCompletionsClient(
         endpoint=endpoint,
@@ -147,10 +156,10 @@ def find_additional_accessible_documents(user_token: str, max_count: int = 10) -
 def main(req: func.HttpRequest) -> func.HttpResponse:
     try:
         # načtení konfigurace
-        search_service = get_env("AZURE_SEARCH_SERVICE_NAME")
-        search_index   = get_env("AZURE_SEARCH_INDEX_NAME")
-        search_api_key = get_env("AZURE_SEARCH_API_KEY")
-        ai_api_key     = get_env("OPENAI_API_KEY")
+        search_service = getenv("AZURE_SEARCH_SERVICE_NAME")
+        search_index   = getenv("AZURE_SEARCH_INDEX_NAME")
+        search_api_key = getenv("AZURE_SEARCH_API_KEY")
+        ai_api_key     = getenv("OPENAI_API_KEY")
 
         # query param
         query = req.params.get("q") or (req.get_json(silent=True) or {}).get("q")

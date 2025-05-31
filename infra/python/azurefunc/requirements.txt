@@ -7,3 +7,4 @@ azure.ai.inference
 python-docx
 PyMuPDF
 python-multipart
+

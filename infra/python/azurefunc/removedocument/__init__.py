@@ -9,26 +9,33 @@ from azure.search.documents.models import SearchQuery   # for type hints, option
 
 # --- HELPERS -------------------------------------------------
 
-def get_env(var_name: str, required: bool = True) -> str:
-    """Načte proměnnou z prostředí; pokud chybí a je required, vyhodí ValueError."""
-    val = os.getenv(var_name)
-    if required and not val:
-        raise ValueError(f"Chybí proměnná prostředí: {var_name}")
-    return val
+ENV_KEY_NAMES = {
+    "AZURE_COGNITIVE_ACCOUNT_NAME": "AZURE_COGNITIVE_ACCOUNT_NAME",
+    "AZURE_EMBEDDING_DEPLOYMENT_NAME": "AZURE_EMBEDDING_DEPLOYMENT_NAME",
+    "AZURE_SEARCH_SERVICE_NAME": "AZURE_SEARCH_SERVICE_NAME",
+    "AZURE_SEARCH_INDEX_NAME": "AZURE_SEARCH_INDEX_NAME",
+    "AZURE_SEARCH_API_KEY": "AZURE_SEARCH_API_KEY",
+    "OPENAI_API_KEY": "OPENAI_API_KEY",
+    "AZURE_CHAT_DEPLOYMENT_NAME": "AZURE_CHAT_DEPLOYMENT_NAME"
+}
 
-def find_document_id(
+def getenv(key_name, default_value):
+    proxied_key_name = ENV_KEY_NAMES.get(key_name, None)
+    assert proxied_key_name is not None, f"missing {key_name} in proxied list of key_names"
+    result = os.getenv(proxied_key_name, default_value)
+    return result
+
+def find_fragments_id(
     client: SearchClient,
     document_folder: str,
     document_name: str
 ) -> str | None:
     """
-    Najde první dokument v indexu podle folder a name a vrátí jeho id,
-    nebo None, pokud dokument neexistuje.
+    Najde vsechny dokumentu v indexu podle folder a vrátí jejich idcka
     """
     # OData filter pro přesnou shodu
     filter_expr = (
-        f"document_folder eq '{document_folder}' and "
-        f"document_name eq '{document_name}'"
+        f"document_folder eq '{document_folder}'"
     )
     results = client.search(
         search_text="*",
@@ -36,25 +43,24 @@ def find_document_id(
         top=1,
         include_total_count=False
     )
-    try:
-        first = next(results)
-        return first["id"]
-    except StopIteration:
-        return None
+    ids = [result["id"] for result in results]
+    return ids
 
-def delete_by_id(
+def delete_by_ids(
     client: SearchClient,
-    document_id: str
+    document_ids: list[str]
 ) -> bool:
     """
-    Smaže dokument podle jeho id. Vrátí True, pokud volání proběhlo bez výjimky.
+    Smaže více dokumentů podle jejich id. Vrátí True, pokud volání proběhne bez výjimky.
     """
     try:
-        res = client.delete_documents(documents=[{"id": document_id}])
-        logging.info(f"Azure Search delete result: {res}")
+        # S Azure Search lze mazat až 1000 záznamů v jednom volání
+        batch = [{"id": did} for did in document_ids]
+        client.delete_documents(documents=batch)
+        logging.info(f"Deleted {len(batch)} documents: {batch}")
         return True
     except Exception as e:
-        logging.error(f"Chyba při mazání dokumentu id={document_id}: {e}")
+        logging.error(f"Chyba při mazání dokumentů: {e}")
         return False
 
 # --- AZURE FUNCTION ------------------------------------------
@@ -62,19 +68,19 @@ def delete_by_id(
 def main(req: func.HttpRequest) -> func.HttpResponse:
     try:
         # 1) načtení konfigurace
-        service_name = get_env("AZURE_SEARCH_SERVICE_NAME")
-        index_name   = get_env("AZURE_SEARCH_INDEX_NAME")
-        api_key      = get_env("AZURE_SEARCH_API_KEY")
+        service_name = getenv("AZURE_SEARCH_SERVICE_NAME")
+        index_name   = getenv("AZURE_SEARCH_INDEX_NAME")
+        api_key      = getenv("AZURE_SEARCH_API_KEY")
 
         # 2) načtení parametrů
         params = req.params or {}
         body = req.get_json(silent=True) or {}
         folder = params.get("document_folder") or body.get("document_folder")
-        name   = params.get("document_name")   or body.get("document_name")
+        # name   = params.get("document_name")   or body.get("document_name")
 
-        if not folder or not name:
+        if not folder:
             return func.HttpResponse(
-                "Chybí parametry 'document_folder' a 'document_name'.",
+                "Chybí parametr 'document_folder'",
                 status_code=400
             )
 
@@ -87,23 +93,23 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         )
 
         # 4) najdeme id a smažeme
-        doc_id = find_document_id(client, folder, name)
-        if not doc_id:
+        doc_ids = find_fragments_id(client, folder, None)
+        if len(doc_ids) == 0:
             return func.HttpResponse(
                 json.dumps({
                     "error": "not_found",
-                    "message": f"Dokument '{name}' ve složce '{folder}' nebyl nalezen."
+                    "message": f"Dokument ve složce '{folder}' nebyl nalezen."
                 }),
                 status_code=404,
                 mimetype="application/json"
             )
 
-        success = delete_by_id(client, doc_id)
+        success = delete_by_ids(client, doc_ids)
         if not success:
             return func.HttpResponse(
                 json.dumps({
                     "error": "delete_failed",
-                    "message": f"Dokument '{name}' (id={doc_id}) se nepodařilo odstranit."
+                    "message": f"Dokumenty (id={doc_ids}) se nepodařilo odstranit."
                 }),
                 status_code=500,
                 mimetype="application/json"
@@ -112,8 +118,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         # 5) odpověď
         return func.HttpResponse(
             json.dumps({
-                "message": f"Dokument '{name}' ve složce '{folder}' byl úspěšně odstraněn.",
-                "id": doc_id
+                "message": f"Dokument ve složce '{folder}' byl úspěšně odstraněn.",
+                "id": doc_ids
             }),
             status_code=200,
             mimetype="application/json"

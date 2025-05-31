@@ -10,6 +10,23 @@ from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 from azure.ai.inference import EmbeddingsClient
 
+
+ENV_KEY_NAMES = {
+    "AZURE_COGNITIVE_ACCOUNT_NAME": "AZURE_COGNITIVE_ACCOUNT_NAME",
+    "AZURE_EMBEDDING_DEPLOYMENT_NAME": "AZURE_EMBEDDING_DEPLOYMENT_NAME",
+    "AZURE_SEARCH_SERVICE_NAME": "AZURE_SEARCH_SERVICE_NAME",
+    "AZURE_SEARCH_INDEX_NAME": "AZURE_SEARCH_INDEX_NAME",
+    "AZURE_SEARCH_API_KEY": "AZURE_SEARCH_API_KEY",
+    "OPENAI_API_KEY": "OPENAI_API_KEY"
+}
+
+def getenv(key_name, default_value):
+    proxied_key_name = ENV_KEY_NAMES.get(key_name, None)
+    assert proxied_key_name is not None, f"missing {key_name} in proxied list of key_names"
+    result = os.getenv(proxied_key_name, default_value)
+    return result
+
+
 # Rozšiřitelné mapování přípon → extrakční funkce
 def extract_text_from_docx(blob_data: bytes) -> str:
     doc = docx.Document(io.BytesIO(blob_data))
@@ -24,9 +41,11 @@ FILE_TRANSFORMERS = {
     "pdf": extract_text_from_pdf
 }
 
-def split_text_to_chunks_with_overlap(text: str,
-                                      max_chunk_size: int = 1000,
-                                      overlap: int = 100) -> list[str]:
+def split_text_to_chunks_with_overlap(
+        text: str,
+        max_chunk_size: int = 1000,
+        overlap: int = 100
+    ) -> list[str]:
     words = text.split()
     chunks = []
     start = 0
@@ -41,11 +60,11 @@ def generate_embedding(api_key: str, texts: list[str]) -> list[list[float]]:
     Volá Azure AI Inference EmbeddingsClient pro batch textů.
     Vrací seznam embeddingů (pořadí odpovídá vstupu).
     """
-    cog_account = os.getenv("AZURE_COGNITIVE_ACCOUNT_NAME", "")
+    cog_account = getenv("AZURE_COGNITIVE_ACCOUNT_NAME", None)
     if not cog_account:
         raise ValueError("Chybí proměnná AZURE_COGNITIVE_ACCOUNT_NAME")
     endpoint = f"https://{cog_account}.openai.azure.com"
-    model_name = os.getenv("AZURE_EMBEDDING_DEPLOYMENT_NAME", "embedding-deployment")
+    model_name = getenv("AZURE_EMBEDDING_DEPLOYMENT_NAME", "embedding-deployment")
 
     client = EmbeddingsClient(
         endpoint=endpoint,
@@ -74,10 +93,10 @@ def index_documents_batch(
 def main(req: func.HttpRequest) -> func.HttpResponse:
     try:
         # načtení konfigurace z env vars
-        search_service  = os.getenv("AZURE_SEARCH_SERVICE_NAME", "")
-        search_index    = os.getenv("AZURE_SEARCH_INDEX_NAME", "")
-        search_api_key  = os.getenv("AZURE_SEARCH_API_KEY", "")
-        ai_api_key      = os.getenv("OPENAI_API_KEY", "")
+        search_service  = getenv("AZURE_SEARCH_SERVICE_NAME", None)
+        search_index    = getenv("AZURE_SEARCH_INDEX_NAME", None)
+        search_api_key  = getenv("AZURE_SEARCH_API_KEY", None)
+        ai_api_key      = getenv("OPENAI_API_KEY", None)
 
         if not all([search_service, search_index, search_api_key, ai_api_key]):
             raise ValueError("Chybí některá z proměnných: "
