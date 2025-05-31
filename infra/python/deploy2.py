@@ -95,6 +95,7 @@ def zip_function_code(source_dir: str, zip_path: str):
                 zipf.write(file_path, arcname)
     print(f"✅ Kód funkcí byl zabalen do '{zip_path}'.")
 
+from azure.mgmt.web.models import StringDictionary  # pro update_application_settings
 
 def create_or_update_function_app(web_client, subscription_id, rg_name, function_app_name, location, plan_name, storage_account_name, connection_string):
     print(f"Vytvářím nebo aktualizuji Function App '{function_app_name}'...")
@@ -125,7 +126,39 @@ def create_or_update_function_app(web_client, subscription_id, rg_name, function
         ).result()
         print(f"✅ Function App '{function_app_name}' vytvořen.")
     else:
-        print(f"ℹ️ Function App '{function_app_name}' již existuje.")
+        print(f"ℹ️ Function App '{function_app_name}' již existuje – aktualizuji app settings…")
+
+        # 1) Načtení původních settings jako slovník
+        existing_config = web_client.web_apps.get_configuration(rg_name, function_app_name)
+        original = {}
+        if existing_config.app_settings:
+            for kv in existing_config.app_settings:
+                # kv má tvar {"name": "klíč", "value": "hodnota"}
+                original[kv["name"]] = kv["value"]
+
+        # 2) Doplníme nebo přepíšeme nová klíč–hodnota
+        original.update({
+            "AzureWebJobsStorage":        connection_string,
+            "FUNCTIONS_WORKER_RUNTIME":   "python",
+            "FUNCTIONS_EXTENSION_VERSION":"~4",
+            # sem přidejte další proměnné, např.:
+            "AZURE_SEARCH_SERVICE_NAME":        "semanticsearchinfra0602",
+            "AZURE_SEARCH_INDEX_NAME":          "my-vector-index",
+            "AZURE_SEARCH_API_KEY":             "<VAŠE_SEARCH_API_KEY>",
+            "AZURE_COGNITIVE_ACCOUNT_NAME":     "axsemanticcogaccount0602",
+            "AZURE_EMBEDDING_DEPLOYMENT_NAME":  "embedding-deployment",
+            "AZURE_CHAT_DEPLOYMENT_NAME":       "summarization-deployment",
+            # "OPENAI_API_KEY":                   "<VAŠE_OPENAI_API_KEY>"
+        })
+
+        # 3) Zabalíme do StringDictionary a zavoláme update_application_settings
+        app_settings_payload = StringDictionary(properties=original)
+        web_client.web_apps.update_application_settings(
+            rg_name,
+            function_app_name,
+            app_settings_payload
+        )
+        print(f"✅ App settings aktualizovány pro Function App '{function_app_name}'.")
 
 
 def upload_zip_to_blob(storage_connection_string, container_name, zip_file_path, storage_account_key, account_name):
