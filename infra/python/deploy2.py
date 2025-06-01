@@ -39,7 +39,7 @@ ENV_VARIABLES = {
 
 }
 
-def setenv(key_name, value):
+def storeenv(key_name, value):
     proxied_key_name = ENV_KEY_NAMES.get(key_name, None)
     assert proxied_key_name is not None, f"missing {key_name} in proxied list of key_names"
     ENV_VARIABLES[proxied_key_name] = value
@@ -550,9 +550,9 @@ def main():
     AZURE_EMBEDDING_DEPLOYMENT_NAME = "text-embedding-ada-002"
     AZURE_CHAT_DEPLOYMENT_NAME = "summarization-deployment"
 
-    setenv("AZURE_COGNITIVE_ACCOUNT_NAME", cognitive_account_name)
-    setenv("AZURE_SEARCH_SERVICE_NAME", search_service_name)
-    setenv("AZURE_SEARCH_INDEX_NAME", vector_index_name)
+    storeenv("AZURE_COGNITIVE_ACCOUNT_NAME", cognitive_account_name)
+    storeenv("AZURE_SEARCH_SERVICE_NAME", search_service_name)
+    storeenv("AZURE_SEARCH_INDEX_NAME", vector_index_name)
 
     # Inicializace klientů
     resource_client = ResourceManagementClient(credential, subscription_id)
@@ -586,7 +586,7 @@ def main():
     search_admin_key = get_search_admin_key(subscription_id, resource_group_name, search_service_name, credential)
     print(f"Search Admin Key: {search_admin_key}")
 
-    setenv("AZURE_SEARCH_API_KEY", search_admin_key)
+    storeenv("AZURE_SEARCH_API_KEY", search_admin_key)
 
     cognitive_services_key = get_cognitive_services_key(subscription_id, resource_group_name, cognitive_account_name, credential)
     print(f"Cognitive Services Key: YOUR_OPENAI_API_KEY='{cognitive_services_key}'")
@@ -601,7 +601,7 @@ def main():
     # Vytvoření nebo aktualizace vector indexu
     create_or_update_vector_index(credential, search_service_name, search_admin_key, vector_index_name, vector_dimension=1536)
 
-    setenv("OPENAI_API_KEY", cognitive_services_key)
+    storeenv("OPENAI_API_KEY", cognitive_services_key)
 
     create_or_update_openai_model_deployment(
         subscription_id,
@@ -624,8 +624,8 @@ def main():
         credential=credential
     )
 
-    setenv("AZURE_EMBEDDING_DEPLOYMENT_NAME", AZURE_EMBEDDING_DEPLOYMENT_NAME)
-    setenv("AZURE_CHAT_DEPLOYMENT_NAME", AZURE_CHAT_DEPLOYMENT_NAME)
+    storeenv("AZURE_EMBEDDING_DEPLOYMENT_NAME", AZURE_EMBEDDING_DEPLOYMENT_NAME)
+    storeenv("AZURE_CHAT_DEPLOYMENT_NAME", AZURE_CHAT_DEPLOYMENT_NAME)
 
     for key in ENV_KEY_NAMES.keys():
         value = getenv(key, None)
