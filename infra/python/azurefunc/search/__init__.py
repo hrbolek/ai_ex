@@ -152,8 +152,22 @@ def find_additional_accessible_documents(user_token: str, max_count: int = 10) -
     return []  # prozatím prázdný seznam (dummy)
 
 # --- AZURE FUNCTION ------------------------------------------
+import base64
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
+
+    # # autentizacni udaje, pokud je nastavena autentizace pomoci entra id ...
+    # principal_b64 = req.headers.get('x-ms-client-principal', None)
+    # if not principal_b64:
+    #     return func.HttpResponse("User not authenticated", status_code=401)
+    # else:
+    #     principal_json = base64.b64decode(principal_b64).decode('utf-8')
+    #     principal = json.loads(principal_json)
+
+    #     user_id = principal.get('userId')
+    #     user_email = principal.get('userDetails')
+    #     idp = principal.get('identityProvider')
+
     try:
         # načtení konfigurace
         search_service = getenv("AZURE_SEARCH_SERVICE_NAME")
