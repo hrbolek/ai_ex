@@ -123,11 +123,12 @@ def generate_summary(
 
 
 TENANT_ID = "xxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+TENANT = "some.company"
 CLIENT_ID = "APP_ID"
 CLIENT_SECRET = "APP_SECRET"
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
 
-SHAREPOINT_SCOPE = ["https://{tenant}.sharepoint.com/.default"]
+SHAREPOINT_SCOPE = [f"https://{TENANT}.sharepoint.com/.default"]
 
 bearerstr = "bearer "
 bearerstrlen = len(bearerstr)
