@@ -8,3 +8,4 @@ python-docx
 PyMuPDF
 python-multipart
 
+PyJWT 
