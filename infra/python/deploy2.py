@@ -656,6 +656,9 @@ def main():
 
     # Přidat nasazení modelů (pouze jako logická ukázka, implementace může být přes CLI/Portal)
 
+    print("env variables")
+    print(ENV_VARIABLES)
+
 
     print("""nutnost update deploy Cognitive Services, endpoint
           # cognitive_account_endpoint = account.properties.endpoint

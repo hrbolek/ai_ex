@@ -108,19 +108,6 @@ def index_documents_batch(
     result = client.upload_documents(documents)
     logging.info(f"Upload result: {result}")
 
-
-def make_json_response(payload, status_code=200):
-    jsondocument = {
-        "payload": payload,
-        "env": {key: os.getenv(key, None) for key in ENV_KEY_NAMES.keys()}
-
-    }
-    return func.HttpResponse(
-        json.dumps(jsondocument, ensure_ascii=False),
-        mimetype="application/json",
-        status_code=status_code
-    )
-
 def main(req: func.HttpRequest) -> func.HttpResponse:
     try:
         # načtení konfigurace z env vars
@@ -171,12 +158,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             return make_json_response({"success": False, "message": msg}, status_code=400)
 
         # batch generování embeddingů
-        try:
-            embeddings = [generate_embedding(ai_api_key, chunk) for chunk in chunks]
-        except Exception as e:
-            msg = f"Chyba při generování embeddingů: {e}"
-            logging.exception(msg)
-            return make_json_response({"success": False, "message": msg}, status_code=500)
+        embeddings = generate_embedding(ai_api_key, chunks)
 
         # příprava dokumentů pro index
         docs = []
@@ -189,26 +171,20 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             })
 
         # nahrát všechny v jednom batch
-        msg = ""
-        try:
-            index_documents_batch(
-                service_name=search_service,
-                index_name=search_index,
-                api_key=search_api_key,
-                documents=docs
-            )
-        except Exception as e:
-            msg = f"Chyba při uploadu do Azure Search: {e}"
-            logging.exception(msg)
-            return make_json_response({"success": False, "message": msg}, status_code=500)
+        index_documents_batch(
+            service_name=search_service,
+            index_name=search_index,
+            api_key=search_api_key,
+            documents=docs
+        )
 
-        return make_json_response({
-            "success": True,
-            "message": msg,
-            "filename": filename,
-            "chunks": len(chunks)
-        }, status_code=200)
-    
+        return func.HttpResponse(
+            f"Dokument '{filename}' rozdělen na {len(chunks)} částí a úspěšně zaindexován.",
+            status_code=200
+        )
+    except ValueError as ve:
+        logging.warning(str(ve))
+        return func.HttpResponse(str(ve), status_code=400)
     except Exception as ex:
         msg = f"Internal server error: {ex}"
         logging.exception(msg)
