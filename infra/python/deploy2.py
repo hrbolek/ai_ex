@@ -633,6 +633,10 @@ def main():
         value = getenv(key, None)
         assert value is not None, f"{key} environment variable has not been set, azure functions are not configured properly"
 
+
+    from .azurefunc.static.HTML_creator import run_static_HTML
+    run_static_HTML(root="")
+
     # Zipování kódu funkcí
     zip_function_code(function_code_dir, zip_file)
 
