@@ -8,8 +8,6 @@ import fitz  # PyMuPDF
 
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
-from azure.ai.inference import EmbeddingsClient
-
 from openai import AzureOpenAI
 
 
@@ -57,7 +55,7 @@ def split_text_to_chunks_with_overlap(
         start += max_chunk_size - overlap
     return chunks
 
-def generate_embedding(api_key: str, text: str) -> list[list[float]]:
+def generate_embedding(api_key: str, text) -> list[list[float]]:
     """
     Volá Azure AI Inference EmbeddingsClient pro batch textů.
     Vrací seznam embeddingů (pořadí odpovídá vstupu).
@@ -66,32 +64,18 @@ def generate_embedding(api_key: str, text: str) -> list[list[float]]:
     if not cog_account:
         raise ValueError("Chybí proměnná AZURE_COGNITIVE_ACCOUNT_NAME")
     endpoint = f"https://{cog_account}.openai.azure.com"
-    endpoint = f"https://axsemanticcogaccount0602.openai.azure.com"
     model_name = getenv("AZURE_EMBEDDING_DEPLOYMENT_NAME", "embedding-deployment")
-    model_name = "text-embedding-3-large"
+    vector_dimensions = 1536
 
     client = AzureOpenAI(
         azure_endpoint=endpoint,
         api_key=api_key,
         api_version="2024-02-01"
     )
-
-    response = client.embeddings.create(
-        model=model_name,
-        dimensions=1536,
-        input=text
-    )
-    result = response.data[0].embedding
-    return result
-
-    # client = EmbeddingsClient(
-    #     endpoint=endpoint,
-    #     credential=AzureKeyCredential(api_key),
-    #     model=model_name
-    # )
-    # response = client.embed(input=texts)
+    response = client.embeddings.create(model=model_name, input=text, dimensions=int(vector_dimensions))
     # response.data je seznam, každý prvek má .embedding
-    # return [item.embedding for item in response.data]
+    embedding = response.data[0].embedding
+    return embedding
 
 def index_documents_batch(
         service_name: str,
@@ -108,14 +92,10 @@ def index_documents_batch(
     result = client.upload_documents(documents)
     logging.info(f"Upload result: {result}")
 
-def make_json_response(payload, status_code=200):
-    jsondocument = {
-        "payload": payload,
-        "env": {key: os.getenv(key, None) for key in ENV_KEY_NAMES.keys()}
 
-    }
+def make_json_response(payload, status_code=200):
     return func.HttpResponse(
-        json.dumps(jsondocument, ensure_ascii=False),
+        json.dumps(payload, ensure_ascii=False),
         mimetype="application/json",
         status_code=status_code
     )
@@ -147,8 +127,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         filename = uploaded.filename
 
         # parametr URL dokumentu
-        document_url = req.form.get("documentUrl") or req.params.get("documentUrl")
-        if not document_url:
+        document_folder = req.form.get("document_folder") or req.params.get("document_folder")
+        if not document_folder:
             msg = "Chybí parametr documentUrl (v těle form nebo query)."
             logging.warning(msg)
             return make_json_response({"success": False, "message": msg}, status_code=400)
@@ -170,33 +150,46 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             return make_json_response({"success": False, "message": msg}, status_code=400)
 
         # batch generování embeddingů
-        embeddings = generate_embedding(ai_api_key, chunks)
+        try:
+            embeddings = [generate_embedding(ai_api_key, chunk) for chunk in chunks]
+        except Exception as e:
+            msg = f"Chyba při generování embeddingů: {e}"
+            logging.exception(msg)
+            return make_json_response({"success": False, "message": msg}, status_code=500)
 
         # příprava dokumentů pro index
         docs = []
+        filename = filename.split(".")[0].encode("ascii", errors="ignore").decode().replace(" ", "")
+
         for i, (chunk, emb) in enumerate(zip(chunks, embeddings), start=1):
             docs.append({
-                "id":        f"{filename.replace('.', '_')}_chunk{i}",
+                "id":        f"{filename}_chunk{i}",
                 "content":   chunk,
-                "document_folder": document_url,
+                "document_folder": document_folder,
                 "contentVector": emb
             })
 
         # nahrát všechny v jednom batch
-        index_documents_batch(
-            service_name=search_service,
-            index_name=search_index,
-            api_key=search_api_key,
-            documents=docs
-        )
+        try:
+            index_documents_batch(
+                service_name=search_service,
+                index_name=search_index,
+                api_key=search_api_key,
+                documents=docs
+            )
+            msg = f"Test message"
+        except Exception as e:
+            msg = f"Chyba při uploadu do Azure Search: {e}"
+            logging.exception(msg)
+            return make_json_response({"success": False, "message": msg}, status_code=500)
 
-        return func.HttpResponse(
-            f"Dokument '{filename}' rozdělen na {len(chunks)} částí a úspěšně zaindexován.",
-            status_code=200
-        )
-    except ValueError as ve:
-        logging.warning(str(ve))
-        return func.HttpResponse(str(ve), status_code=400)
+        return make_json_response({
+            "success": True,
+            "message": msg,
+            "filename": filename,
+            "chunks": len(chunks)
+        }, status_code=200)
+    
     except Exception as ex:
         msg = f"Internal server error: {ex}"
         logging.exception(msg)

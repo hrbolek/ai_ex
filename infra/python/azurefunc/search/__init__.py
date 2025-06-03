@@ -269,18 +269,6 @@ def find_additional_accessible_documents(user_token: str, max_count: int = 10) -
 # --- AZURE FUNCTION ------------------------------------------
 import base64
 
-def make_json_response(payload, status_code=200):
-    jsondocument = {
-        "payload": payload,
-        "env": {key: os.getenv(key, None) for key in ENV_KEY_NAMES.keys()}
-
-    }
-    return func.HttpResponse(
-        json.dumps(jsondocument, ensure_ascii=False),
-        mimetype="application/json",
-        status_code=status_code
-    )
-
 def main(req: func.HttpRequest) -> func.HttpResponse:
 
     # # autentizacni udaje, pokud je nastavena autentizace pomoci entra id ...
@@ -314,23 +302,13 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         # query param
         query = req.params.get("q") or (req.get_json() or {}).get("q")
         if not query:
-            return make_json_response(
-                payload={
-                    "msg": "Chybí parametr 'q' (search query).",
-                },
+            return func.HttpResponse(
+                "Chybí parametr 'q' (search query).",
                 status_code=400
             )
 
         # 1) embedding dotazu
-        try:
-            vec = generate_embedding(api_key=ai_api_key,text=query)
-        except Exception as e:
-            return make_json_response(
-                {
-                    "msg": f"{e}",
-                    "exception": f"{e}"
-                } 
-            )
+        vec = generate_embedding(api_key=ai_api_key,text=query)
 
         # 2) vyhledání top dokumentů / fragmentů
         docs = search_by_vector(vec, search_service, search_index, search_api_key, top=5)
@@ -338,27 +316,22 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         # 3) filtrování podle přístupu uživatele (zatím dummy)
         # TODO: implementovat reálnou kontrolu Entra ID
 
-        # urls = {doc["document_folder"] for doc in docs}
-        # available_urls = [check_user_access_to_document(user_token=user_access_token, document_folder=url) for url in urls]
-        # accessible_docs = [doc for doc in docs if doc["document_folder"] in available_urls]
-        # accessible_docs_len = len(accessible_docs)
-        # if accessible_docs_len < 10:
-        #     other_docs = find_additional_accessible_documents(user_token=user_access_token, max_count=10-len(accessible_docs))
-        #     urls = {doc["document_folder"] for doc in other_docs}
-        #     other_available_urls = [check_user_access_to_document(user_token=user_access_token, document_folder=url) for url in urls]
-        #     other_accessible_docs = [doc for doc in docs if doc["document_folder"] in other_available_urls]
-        #     accessible_docs.extend(other_accessible_docs)
-        #     accessible_docs_len = len(accessible_docs)
+        urls = {doc["document_folder"] for doc in docs}
+        available_urls = [check_user_access_to_document(user_token=user_access_token, document_folder=url) for url in urls]
+        accessible_docs = [doc for doc in docs if doc["document_folder"] in available_urls]
+        accessible_docs_len = len(accessible_docs)
+        if accessible_docs_len < 10:
+            other_docs = find_additional_accessible_documents(user_token=user_access_token, max_count=10-len(accessible_docs))
+            urls = {doc["document_folder"] for doc in other_docs}
+            other_available_urls = [check_user_access_to_document(user_token=user_access_token, document_folder=url) for url in urls]
+            other_accessible_docs = [doc for doc in docs if doc["document_folder"] in other_available_urls]
+            accessible_docs.extend(other_accessible_docs)
+            accessible_docs_len = len(accessible_docs)
+
+
 
         # 4) generování souhrnu s odkazy
-        try:
-            summary = generate_summary(docs, query, ai_api_key)
-        except Exception as e:
-            return make_json_response(
-                {
-                    "msg": "Internal server error.",
-                    "exception": f"{e}"
-                }, status_code=500)
+        summary = generate_summary(docs, query, ai_api_key)
 
         # 5) výstup JSON
         payload = {
@@ -366,23 +339,15 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             "summary":  summary,
             "documents": docs
         }
-        return make_json_response(
-            payload,
+        return func.HttpResponse(
+            json.dumps(payload, ensure_ascii=False),
+            mimetype="application/json",
             status_code=200
         )
 
     except ValueError as ve:
         logging.warning(str(ve))
-        return make_json_response(
-            {
-                "msg": str(ve), 
-                "exception": f"{ve}"
-            },  status_code=400
-        )
+        return func.HttpResponse(str(ve), status_code=400)
     except Exception as e:
         logging.exception(e)
-        return make_json_response(
-            {
-                "msg": "Internal server error.",
-                "exception": f"{e}"
-            }, status_code=500)
+        return func.HttpResponse("Internal server error.", status_code=500)

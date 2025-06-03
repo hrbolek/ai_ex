@@ -1,7 +1,6 @@
 import React, { useRef, useState } from "react";
-import 'bootstrap/dist/css/bootstrap.min.css';
 
-export const App = () => {
+export const DocSearch = () => {
   const [document_folder, setdocument_folder] = useState("");
   const [error, setError] = useState(null);
   const [response, setResponse] = useState("");
@@ -80,4 +79,4 @@ export const App = () => {
       </div>}
     </div>
   );
-};
+}

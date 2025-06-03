@@ -5,7 +5,6 @@ import logging
 import azure.functions as func
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
-# from azure.search.documents.models import SearchQuery   # for type hints, optional
 
 # --- HELPERS -------------------------------------------------
 
@@ -28,7 +27,6 @@ def getenv(key_name, default_value):
 def find_fragments_id(
     client: SearchClient,
     document_folder: str,
-    document_name: str
 ) -> str | None:
     """
     Najde vsechny dokumentu v indexu podle folder a vrátí jejich idcka
@@ -68,14 +66,13 @@ def delete_by_ids(
 def main(req: func.HttpRequest) -> func.HttpResponse:
     try:
         # 1) načtení konfigurace
-        service_name = getenv("AZURE_SEARCH_SERVICE_NAME")
-        index_name   = getenv("AZURE_SEARCH_INDEX_NAME")
-        api_key      = getenv("AZURE_SEARCH_API_KEY")
+        service_name = getenv("AZURE_SEARCH_SERVICE_NAME", "")
+        index_name   = getenv("AZURE_SEARCH_INDEX_NAME", "")
+        api_key      = getenv("AZURE_SEARCH_API_KEY", "")
 
         # 2) načtení parametrů
         params = req.params or {}
-        body = req.get_json(silent=True) or {}
-        folder = params.get("document_folder") or body.get("document_folder")
+        folder = params.get("document_folder")
         # name   = params.get("document_name")   or body.get("document_name")
 
         if not folder:
@@ -93,7 +90,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         )
 
         # 4) najdeme id a smažeme
-        doc_ids = find_fragments_id(client, folder, None)
+        doc_ids = find_fragments_id(client, folder)
         if len(doc_ids) == 0:
             return func.HttpResponse(
                 json.dumps({
