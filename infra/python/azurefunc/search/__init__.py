@@ -9,7 +9,8 @@ import azure.functions as func
 
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
-from azure.ai.inference import EmbeddingsClient, ChatCompletionsClient
+from azure.search.documents.models import VectorizedQuery
+from openai import AzureOpenAI
 
 # --- HELPERS -------------------------------------------------
 
@@ -29,22 +30,27 @@ def getenv(key_name, default_value):
     result = os.getenv(proxied_key_name, default_value)
     return result
 
-def generate_embedding(texts: list[str], api_key: str) -> list[list[float]]:
+def generate_embedding(api_key: str, text) -> list[list[float]]:
     """
-    Vygeneruje embeddingy pomocí Azure AI Inference.
-    texts: seznam řetězců
+    Volá Azure AI Inference EmbeddingsClient pro batch textů.
+    Vrací seznam embeddingů (pořadí odpovídá vstupu).
     """
-    account = getenv("AZURE_COGNITIVE_ACCOUNT_NAME")
-    deployment = getenv("AZURE_EMBEDDING_DEPLOYMENT_NAME")
-    endpoint = f"https://{account}.openai.azure.com"
+    cog_account = getenv("AZURE_COGNITIVE_ACCOUNT_NAME", None)
+    if not cog_account:
+        raise ValueError("Chybí proměnná AZURE_COGNITIVE_ACCOUNT_NAME")
+    endpoint = f"https://{cog_account}.openai.azure.com"
+    model_name = getenv("AZURE_EMBEDDING_DEPLOYMENT_NAME", "embedding-deployment")
+    vector_dimensions = 1536
 
-    client = EmbeddingsClient(
-        endpoint=endpoint,
-        credential=AzureKeyCredential(api_key),
-        model=deployment
+    client = AzureOpenAI(
+        azure_endpoint=endpoint,
+        api_key=api_key,
+        api_version="2024-02-01"
     )
-    resp = client.embed(input=texts)
-    return [item.embedding for item in resp.data]
+    response = client.embeddings.create(model=model_name, input=text, dimensions=int(vector_dimensions))
+    # response.data je seznam, každý prvek má .embedding
+    embedding = response.data[0].embedding
+    return embedding
 
 def search_by_vector(
     query_vector: list[float],
@@ -57,19 +63,25 @@ def search_by_vector(
     Provede vektorové vyhledávání nad indexem.
     """
     endpoint = f"https://{service_name}.search.windows.net"
+
     client = SearchClient(
         endpoint=endpoint,
         index_name=index_name,
         credential=AzureKeyCredential(api_key)
     )
+
+
+    vq = VectorizedQuery(
+        vector=query_vector,
+        k_nearest_neighbors=top,
+        fields="contentVector",
+    )
+
     results = client.search(
         search_text="*",
-        vector={
-            "value": query_vector,
-            "fields": "contentVector",
-            "k": top
-        }
+        vector_queries= [vq]
     )
+
     docs = []
     for r in results:
         docs.append({
@@ -91,18 +103,18 @@ def generate_summary(
     """
     Vygeneruje souhrn s odkazy na zdroje pomocí Azure AI Inference Chat.
     """
-    account = getenv("AZURE_COGNITIVE_ACCOUNT_NAME")
-    deployment = getenv("AZURE_CHAT_DEPLOYMENT_NAME", required=False) or "summarization-deployment"
+    account = getenv("AZURE_COGNITIVE_ACCOUNT_NAME", "")
+    model_name = getenv("AZURE_CHAT_DEPLOYMENT_NAME", "") or "summarization-deployment"
     endpoint = f"https://{account}.openai.azure.com"
-    client = ChatCompletionsClient(
-        endpoint=endpoint,
-        credential=AzureKeyCredential(api_key),
-        model=deployment
+    client = AzureOpenAI(
+        azure_endpoint=endpoint,
+        api_key=api_key,
+        api_version="2024-02-01"
     )
 
     # Sestavíme prompt
     context = "\n\n".join(
-        f"[{i+1}] {d['content']}\nSource: {d['url']}"
+        f"[{i+1}] {d['content']}\nSource: {d['document_folder']}"
         for i, d in enumerate(docs)
     )
     prompt = (
@@ -111,15 +123,14 @@ def generate_summary(
         "Ve své odpovědi odkáž na zdroje [1], [2], ... a na konci uveď jejich seznam s URL."
     )
 
-    resp = client.complete(
-        messages=[
+    response = client.chat.completions.create(model=model_name, messages=[
             {"role": "system", "content": "Jsi nápomocný asistent, cituj zdroje."},
-            {"role": "user",   "content": prompt}
+            {"role": "user",   "content": prompt},
         ],
         temperature=0.3,
-        max_tokens=500
-    )
-    return resp.choices[0].message.content
+        max_tokens=500)
+
+    return response.choices[0].message.content
 
 
 TENANT_ID = "xxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
@@ -171,7 +182,7 @@ def get_sp_access_token(user_token):
         raise Exception(f"Failed to acquire SharePoint token: {result.get('error_description')}")
 
 
-def check_user_access_to_document(user_token: str, document_url: str) -> bool:
+def check_user_access_to_document(user_token: str, document_folder: str) -> bool:
     """
     Ověří, zda má uživatel s daným tokenem přístup k dokumentu na dané URL.
     
@@ -179,7 +190,7 @@ def check_user_access_to_document(user_token: str, document_url: str) -> bool:
     kontrola oprávnění uživatele k přístupu k dokumentu.
 
     :param user_token: Access token uživatele (např. JWT token)
-    :param document_url: URL dokumentu, ke kterému je potřeba ověřit přístup
+    :param document_folder: URL dokumentu, ke kterému je potřeba ověřit přístup
     :return: True pokud má uživatel přístup, False jinak
     """
     # TODO: Implementovat volání Entra/Azure AD k ověření tokenu a přístupových práv
@@ -193,7 +204,7 @@ def check_user_access_to_document(user_token: str, document_url: str) -> bool:
     headers = {"Authorization": f"Bearer {sp_access_token}"}
     
     # toto by bylo lepsi udelat jako asynchronni funkci
-    resp = requests.get(document_url, headers=headers)
+    resp = requests.get(document_folder, headers=headers)
     return resp.status_code == 200  # nebo zpracuj další statusy
 
     # return True  # prozatím vždy povolit (dummy)
@@ -228,7 +239,7 @@ def find_additional_accessible_documents2(user_token, search_vector, desired_cou
 
         # 3. Zkontroluj přístupová práva a přidej do výsledku jen ty, ke kterým má uživatel přístup
         for doc in new_candidates:
-            if check_user_access_to_document(user_token, doc["document_url"]):
+            if check_user_access_to_document(user_token, doc["document_folder"]):
                 found_docs.append(doc)
                 if len(found_docs) == desired_count:
                     break
@@ -258,6 +269,18 @@ def find_additional_accessible_documents(user_token: str, max_count: int = 10) -
 # --- AZURE FUNCTION ------------------------------------------
 import base64
 
+def make_json_response(payload, status_code=200):
+    jsondocument = {
+        "payload": payload,
+        "env": {key: os.getenv(key, None) for key in ENV_KEY_NAMES.keys()}
+
+    }
+    return func.HttpResponse(
+        json.dumps(jsondocument, ensure_ascii=False),
+        mimetype="application/json",
+        status_code=status_code
+    )
+
 def main(req: func.HttpRequest) -> func.HttpResponse:
 
     # # autentizacni udaje, pokud je nastavena autentizace pomoci entra id ...
@@ -283,21 +306,31 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
     try:
         # načtení konfigurace
-        search_service = getenv("AZURE_SEARCH_SERVICE_NAME")
-        search_index   = getenv("AZURE_SEARCH_INDEX_NAME")
-        search_api_key = getenv("AZURE_SEARCH_API_KEY")
-        ai_api_key     = getenv("OPENAI_API_KEY")
+        search_service = getenv("AZURE_SEARCH_SERVICE_NAME", "")
+        search_index   = getenv("AZURE_SEARCH_INDEX_NAME", "")
+        search_api_key = getenv("AZURE_SEARCH_API_KEY","")
+        ai_api_key     = getenv("OPENAI_API_KEY","")
 
         # query param
-        query = req.params.get("q") or (req.get_json(silent=True) or {}).get("q")
+        query = req.params.get("q") or (req.get_json() or {}).get("q")
         if not query:
-            return func.HttpResponse(
-                "Chybí parametr 'q' (search query).",
+            return make_json_response(
+                payload={
+                    "msg": "Chybí parametr 'q' (search query).",
+                },
                 status_code=400
             )
 
         # 1) embedding dotazu
-        vec = generate_embedding([query], ai_api_key)[0]
+        try:
+            vec = generate_embedding(api_key=ai_api_key,text=query)
+        except Exception as e:
+            return make_json_response(
+                {
+                    "msg": f"{e}",
+                    "exception": f"{e}"
+                } 
+            )
 
         # 2) vyhledání top dokumentů / fragmentů
         docs = search_by_vector(vec, search_service, search_index, search_api_key, top=5)
@@ -305,22 +338,27 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         # 3) filtrování podle přístupu uživatele (zatím dummy)
         # TODO: implementovat reálnou kontrolu Entra ID
 
-        urls = {doc["document_url"] for doc in docs}
-        available_urls = [check_user_access_to_document(user_token=user_access_token, document_url=url) for url in urls]
-        accessible_docs = [doc for doc in docs if doc["document_url"] in available_urls]
-        accessible_docs_len = len(accessible_docs)
-        if accessible_docs_len < 10:
-            other_docs = find_additional_accessible_documents(user_token=user_access_token, max_count=10-accessible_docs)
-            urls = {doc["document_url"] for doc in other_docs}
-            other_available_urls = [check_user_access_to_document(user_token=user_access_token, document_url=url) for url in urls]
-            other_accessible_docs = [doc for doc in docs if doc["document_url"] in other_available_urls]
-            accessible_docs.extend(other_accessible_docs)
-            accessible_docs_len = len(accessible_docs)
-
-
+        # urls = {doc["document_folder"] for doc in docs}
+        # available_urls = [check_user_access_to_document(user_token=user_access_token, document_folder=url) for url in urls]
+        # accessible_docs = [doc for doc in docs if doc["document_folder"] in available_urls]
+        # accessible_docs_len = len(accessible_docs)
+        # if accessible_docs_len < 10:
+        #     other_docs = find_additional_accessible_documents(user_token=user_access_token, max_count=10-len(accessible_docs))
+        #     urls = {doc["document_folder"] for doc in other_docs}
+        #     other_available_urls = [check_user_access_to_document(user_token=user_access_token, document_folder=url) for url in urls]
+        #     other_accessible_docs = [doc for doc in docs if doc["document_folder"] in other_available_urls]
+        #     accessible_docs.extend(other_accessible_docs)
+        #     accessible_docs_len = len(accessible_docs)
 
         # 4) generování souhrnu s odkazy
-        summary = generate_summary(docs, query, ai_api_key)
+        try:
+            summary = generate_summary(docs, query, ai_api_key)
+        except Exception as e:
+            return make_json_response(
+                {
+                    "msg": "Internal server error.",
+                    "exception": f"{e}"
+                }, status_code=500)
 
         # 5) výstup JSON
         payload = {
@@ -328,15 +366,23 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             "summary":  summary,
             "documents": docs
         }
-        return func.HttpResponse(
-            json.dumps(payload, ensure_ascii=False),
-            mimetype="application/json",
+        return make_json_response(
+            payload,
             status_code=200
         )
 
     except ValueError as ve:
         logging.warning(str(ve))
-        return func.HttpResponse(str(ve), status_code=400)
+        return make_json_response(
+            {
+                "msg": str(ve), 
+                "exception": f"{ve}"
+            },  status_code=400
+        )
     except Exception as e:
         logging.exception(e)
-        return func.HttpResponse("Internal server error.", status_code=500)
+        return make_json_response(
+            {
+                "msg": "Internal server error.",
+                "exception": f"{e}"
+            }, status_code=500)

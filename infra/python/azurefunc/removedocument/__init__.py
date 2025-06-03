@@ -5,7 +5,7 @@ import logging
 import azure.functions as func
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
-from azure.search.documents.models import SearchQuery   # for type hints, optional
+# from azure.search.documents.models import SearchQuery   # for type hints, optional
 
 # --- HELPERS -------------------------------------------------
 

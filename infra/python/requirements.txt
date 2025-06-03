@@ -13,3 +13,5 @@ azure-mgmt-storage
 azure-mgmt-web 
 azure-storage-blob
 azure-mgmt-cognitiveservices
+
+openai

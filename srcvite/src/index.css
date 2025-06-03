@@ -1,0 +1,47 @@
+@media screen {
+    .screen-only {
+      display: block;
+    }
+    .print-only {
+      display: none;
+    }
+}
+
+@media print {
+    .screen-only {
+      display: none;
+    }
+    .print-only {
+      display: block;
+    }
+}
+
+@media print {
+    /* Start a new page before each section */
+    .page-break-before {
+      break-before: page;
+    }
+
+    /* Ensure a page break after the section */
+    .page-break-after {
+      break-after: page;
+    }
+
+    /* Prevent page breaks inside this container */
+    .no-page-break {
+      break-inside: avoid;
+    }
+
+    /* Fallback for older browsers */
+    .page-break-before {
+      page-break-before: always;
+    }
+
+    .page-break-after {
+      page-break-after: always;
+    }
+
+    .no-page-break {
+      page-break-inside: avoid;
+    }
+  }

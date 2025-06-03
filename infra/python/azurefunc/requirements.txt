@@ -9,3 +9,5 @@ PyMuPDF
 python-multipart
 
 PyJWT 
+
+openai

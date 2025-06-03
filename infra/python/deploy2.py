@@ -547,8 +547,9 @@ def main():
     vector_index_name = "my_vector_index" + postfix
     skillset_name = "my-skillset" + postfix
 
-    AZURE_EMBEDDING_DEPLOYMENT_NAME = "text-embedding-ada-002"
+    # AZURE_EMBEDDING_DEPLOYMENT_NAME = "text-embedding-ada-002"
     AZURE_CHAT_DEPLOYMENT_NAME = "summarization-deployment"
+    AZURE_EMBEDDING_DEPLOYMENT_NAME = "text-embedding-3-large"
 
     storeenv("AZURE_COGNITIVE_ACCOUNT_NAME", cognitive_account_name)
     storeenv("AZURE_SEARCH_SERVICE_NAME", search_service_name)
@@ -608,7 +609,7 @@ def main():
         resource_group_name,
         cognitive_account_name,
         AZURE_EMBEDDING_DEPLOYMENT_NAME,
-        "text-embedding-ada-002",
+        "text-embedding-3-large",
         sku_name="Standard",
         capacity=1,
         credential=credential
@@ -618,7 +619,8 @@ def main():
         resource_group_name,
         cognitive_account_name,
         AZURE_CHAT_DEPLOYMENT_NAME,
-        "gpt-4o-mini",
+        # "gpt-4o-mini",  
+        "gpt-4.1-mini",  
         sku_name="Standard",
         capacity=1,
         credential=credential
@@ -653,6 +655,13 @@ def main():
     # cognitive_account_endpoint = account.properties.endpoint
 
     # Přidat nasazení modelů (pouze jako logická ukázka, implementace může být přes CLI/Portal)
+
+
+    print("""nutnost update deploy Cognitive Services, endpoint
+          # cognitive_account_endpoint = account.properties.endpoint
+          """)
+    print("env variables")
+    print(ENV_VARIABLES)
 
 
 if __name__ == "__main__":
