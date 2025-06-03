@@ -654,6 +654,9 @@ def main():
 
     # Přidat nasazení modelů (pouze jako logická ukázka, implementace může být přes CLI/Portal)
 
+    print("env variables")
+    print(ENV_VARIABLES)
+
 
 if __name__ == "__main__":
     main()
