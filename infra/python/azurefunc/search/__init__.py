@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-import msal
+# import msal
 import requests
 import jwt
 
@@ -167,19 +167,20 @@ def get_user_email_from_req(req):
         return None
     
 def get_sp_access_token(user_token):
-    app = msal.ConfidentialClientApplication(
-        CLIENT_ID,
-        authority=AUTHORITY,
-        client_credential=CLIENT_SECRET
-    )
-    result = app.acquire_token_on_behalf_of(
-        user_assertion=user_token,
-        scopes=SHAREPOINT_SCOPE,
-    )
-    if "access_token" in result:
-        return result["access_token"]
-    else:
-        raise Exception(f"Failed to acquire SharePoint token: {result.get('error_description')}")
+    # app = msal.ConfidentialClientApplication(
+    #     CLIENT_ID,
+    #     authority=AUTHORITY,
+    #     client_credential=CLIENT_SECRET
+    # )
+    # result = app.acquire_token_on_behalf_of(
+    #     user_assertion=user_token,
+    #     scopes=SHAREPOINT_SCOPE,
+    # )
+    # if "access_token" in result:
+    #     return result["access_token"]
+    # else:
+    #     raise Exception(f"Failed to acquire SharePoint token: {result.get('error_description')}")
+    pass
 
 
 def check_user_access_to_document(user_token: str, document_folder: str) -> bool:

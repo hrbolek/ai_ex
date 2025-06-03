@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react"; // Enables React-specific optimizations and HMR
 import path from "path"; // Provides utilities for working with file and directory paths
 import compression from "vite-plugin-compression";
+import { viteExternalsPlugin } from "vite-plugin-externals";
 // import { VitePWA } from "vite-plugin-pwa";
 
 // const PWA = () => {
@@ -32,6 +33,12 @@ export default defineConfig({
 
   // Plugins section
   plugins: [
+    viteExternalsPlugin({
+      "react": "React",
+      "react-dom": "ReactDOM",
+      "bootstrap": "bootstrap",
+      "@popperjs/core": "Popper",
+    }),    
     react(), // Adds React plugin for handling JSX/TSX and fast refresh
     compression(), // Add gzip compression
   ],
@@ -77,10 +84,26 @@ export default defineConfig({
   },
 
   // Build options
-  build: {
-    rollupOptions: {
-      external: [
-      ],
-    },
-  },
+build: {
+  minify: false,  // ← Tímto Vite vypne minifikaci JS
+  rollupOptions: {
+    external: [
+      "react",
+      "react-dom",
+      "react-router",
+      "bootstrap",
+      "@popperjs/core"
+    ],
+    output: {
+      globals: {
+        react: "React",
+        "react-dom": "ReactDOM",
+        
+        bootstrap: "bootstrap",
+        "@popperjs/core": "Popper"
+      }
+    }
+  }
+}
+
 });

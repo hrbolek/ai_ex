@@ -2,10 +2,18 @@ azure-functions
 
 azure-search-documents
 azure-storage-blob
-azure.ai.inference
+azure-ai-inference
 
 python-docx
 PyMuPDF
 python-multipart
 
 PyJWT 
+
+openai
+msal
+requests
+azure-identity
+azure-core
+azure-data-tables
+numpy

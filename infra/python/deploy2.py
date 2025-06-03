@@ -611,7 +611,7 @@ def main():
         AZURE_EMBEDDING_DEPLOYMENT_NAME,
         "text-embedding-3-large",
         sku_name="Standard",
-        capacity=1,
+        capacity=100,
         credential=credential
     )
     create_or_update_openai_model_deployment(
@@ -619,10 +619,10 @@ def main():
         resource_group_name,
         cognitive_account_name,
         AZURE_CHAT_DEPLOYMENT_NAME,
-        # "gpt-4o-mini",  
-        "gpt-4.1-mini",  
+        "gpt-4o-mini",  
+        # "gpt-4.1-mini",  
         sku_name="Standard",
-        capacity=1,
+        capacity=200,
         credential=credential
     )
 
@@ -634,7 +634,7 @@ def main():
         assert value is not None, f"{key} environment variable has not been set, azure functions are not configured properly"
 
 
-    from .azurefunc.static.HTML_creator import run_static_HTML
+    from azurefunc.static.HTML_creator import run_static_HTML
     run_static_HTML(root="")
 
     # Zipování kódu funkcí

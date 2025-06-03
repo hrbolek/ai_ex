@@ -17,12 +17,12 @@ def get_content(extension):
             print(f"Error reading {file}: {e}")
 
 def run_static_HTML(root):
-    css_content = get_content("css")
-    js_content = get_content("js")
+    # css_content = get_content("css")
+    # js_content = get_content("js")
     html_content = get_content("html")
 
-    html_content = html_content.replace("$STYLE$", css_content)
-    html_content = html_content.replace("$SCRIPT$", js_content)
+    # html_content = html_content.replace("$$$$STYLE$$$$", css_content)
+    # html_content = html_content.replace("$$$$SCRIPT$$$$", js_content)
     # $STYLE$
     # $SRIPT$
     current_dir = Path(__file__).parent
