@@ -72,7 +72,7 @@ def generate_embedding(api_key: str, text) -> list[list[float]]:
         api_key=api_key,
         api_version="2024-02-01"
     )
-    response = client.embeddings.create(model=model_name, input=text, dimensions=int(vector_dimensions))
+    response = client.embeddings.create(model=model_name, input=text.lower(), dimensions=int(vector_dimensions))
     # response.data je seznam, každý prvek má .embedding
     embedding = response.data[0].embedding
     return embedding

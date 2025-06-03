@@ -60,9 +60,9 @@ export const SearchApp = () => {
       <div className="SearchApp">
         <h2 className="text-2xl font-bold mb-4">Vyhledávání v dokumentech</h2>
         <div className="flex flex-column align-items-center">
-          <div className="flex flex-wrap justify-content-center gap-2 mb-4 mt-4" style={{ maxWidth: '500px' }}>
+          <div >
             {isLoading ? <div>Načítám</div> : <>
-              <div className="p-inputgroup flex-1">
+              <div >
                 <input
                   type="text"
                   className="form-control"

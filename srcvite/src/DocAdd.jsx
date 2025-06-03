@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 
-export const DocSearch = () => {
+export const DocAdd = () => {
   const [document_folder, setdocument_folder] = useState("");
   const [error, setError] = useState(null);
   const [response, setResponse] = useState("");

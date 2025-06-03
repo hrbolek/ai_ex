@@ -291,7 +291,6 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     # user_access_token = user_access_token.replace(bearerstr, "")
 
     user_access_token = None
-
     try:
         # načtení konfigurace
         search_service = getenv("AZURE_SEARCH_SERVICE_NAME", "")
@@ -301,6 +300,8 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
 
         # query param
         query = req.params.get("q") or (req.get_json() or {}).get("q")
+        query = query.lower()
+
         if not query:
             return func.HttpResponse(
                 "Chybí parametr 'q' (search query).",
@@ -308,7 +309,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             )
 
         # 1) embedding dotazu
-        vec = generate_embedding(api_key=ai_api_key,text=query)
+        vec = generate_embedding(api_key=ai_api_key,text=query.lower())
 
         # 2) vyhledání top dokumentů / fragmentů
         docs = search_by_vector(vec, search_service, search_index, search_api_key, top=5)
