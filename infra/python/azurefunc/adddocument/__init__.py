@@ -1,7 +1,7 @@
 import os
 import io
 import logging
-
+import json
 import azure.functions as func
 import docx
 import fitz  # PyMuPDF
@@ -90,6 +90,14 @@ def index_documents_batch(
     result = client.upload_documents(documents)
     logging.info(f"Upload result: {result}")
 
+
+def make_json_response(payload, status_code=200):
+    return func.HttpResponse(
+        json.dumps(payload, ensure_ascii=False),
+        mimetype="application/json",
+        status_code=status_code
+    )
+
 def main(req: func.HttpRequest) -> func.HttpResponse:
     try:
         # načtení konfigurace z env vars
@@ -99,16 +107,19 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         ai_api_key      = getenv("OPENAI_API_KEY", None)
 
         if not all([search_service, search_index, search_api_key, ai_api_key]):
-            raise ValueError("Chybí některá z proměnných: "
-                             "AZURE_SEARCH_SERVICE_NAME, AZURE_SEARCH_INDEX_NAME, "
-                             "AZURE_SEARCH_API_KEY nebo OPENAI_API_KEY.")
+            msg = ("Chybí některá z proměnných: "
+                   "AZURE_SEARCH_SERVICE_NAME, AZURE_SEARCH_INDEX_NAME, "
+                   "AZURE_SEARCH_API_KEY nebo OPENAI_API_KEY.")
+            logging.warning(msg)
+            return make_json_response({"success": False, "message": msg}, status_code=400)
+        
 
         # zpracování multipart/form-data
         if not req.files or "file" not in req.files:
-            return func.HttpResponse(
-                "Očekávám soubor v poli 'file' (multipart/form-data).",
-                status_code=400
-            )
+            msg = "Očekávám soubor v poli 'file' (multipart/form-data)."
+            logging.warning(msg)
+            return make_json_response({"success": False, "message": msg}, status_code=400)
+        
         uploaded = req.files["file"]
         blob_data = uploaded.stream.read()
         filename = uploaded.filename
@@ -116,27 +127,33 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         # parametr URL dokumentu
         document_url = req.form.get("documentUrl") or req.params.get("documentUrl")
         if not document_url:
-            return func.HttpResponse(
-                "Chybí parametr documentUrl (v těle form nebo query).",
-                status_code=400
-            )
+            msg = "Chybí parametr documentUrl (v těle form nebo query)."
+            logging.warning(msg)
+            return make_json_response({"success": False, "message": msg}, status_code=400)
 
         # extrakce textu podle přípony
         ext = filename.rsplit(".", 1)[-1].lower()
         if ext not in FILE_TRANSFORMERS:
-            return func.HttpResponse(
-                f"Podporované přípony: {', '.join(FILE_TRANSFORMERS)}",
-                status_code=400
-            )
+            msg = f"Podporované přípony: {', '.join(FILE_TRANSFORMERS)}"
+            logging.warning(msg)
+            return make_json_response({"success": False, "message": msg}, status_code=400)
+        
         content = FILE_TRANSFORMERS[ext](blob_data)
 
         # rozdělíme na překrývající se chunk-y
         chunks = split_text_to_chunks_with_overlap(content)
         if not chunks:
-            raise ValueError("Extrahovaný text je prázdný.")
+            msg = "Extrahovaný text je prázdný."
+            logging.warning(msg)
+            return make_json_response({"success": False, "message": msg}, status_code=400)
 
         # batch generování embeddingů
-        embeddings = generate_embedding(ai_api_key, chunks)
+        try:
+            embeddings = generate_embedding(ai_api_key, chunks)
+        except Exception as e:
+            msg = f"Chyba při generování embeddingů: {e}"
+            logging.exception(msg)
+            return make_json_response({"success": False, "message": msg}, status_code=500)
 
         # příprava dokumentů pro index
         docs = []
@@ -149,22 +166,26 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             })
 
         # nahrát všechny v jednom batch
-        index_documents_batch(
-            service_name=search_service,
-            index_name=search_index,
-            api_key=search_api_key,
-            documents=docs
-        )
+        try:
+            index_documents_batch(
+                service_name=search_service,
+                index_name=search_index,
+                api_key=search_api_key,
+                documents=docs
+            )
+        except Exception as e:
+            msg = f"Chyba při uploadu do Azure Search: {e}"
+            logging.exception(msg)
+            return make_json_response({"success": False, "message": msg}, status_code=500)
 
-        return func.HttpResponse(
-            f"Dokument '{filename}' rozdělen na {len(chunks)} částí a úspěšně zaindexován.",
-            status_code=200
-        )
-    except ValueError as ve:
-        logging.warning(str(ve))
-        return func.HttpResponse(str(ve), status_code=400)
+        return make_json_response({
+            "success": True,
+            "message": msg,
+            "filename": filename,
+            "chunks": len(chunks)
+        }, status_code=200)
+    
     except Exception as ex:
-        logging.exception(ex)
-        return func.HttpResponse(
-            "Internal server error.", status_code=500
-        )
+        msg = f"Internal server error: {ex}"
+        logging.exception(msg)
+        return make_json_response({"success": False, "message": msg}, status_code=500)
