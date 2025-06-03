@@ -1,6 +1,8 @@
 import React, { useRef, useState } from "react";
 import 'bootstrap/dist/css/bootstrap.min.css';
 
+import { SearchApp } from "./SearchApp"
+
 export const App = () => {
   const [document_folder, setdocument_folder] = useState("");
   const [error, setError] = useState(null);
@@ -78,6 +80,8 @@ export const App = () => {
       {error && <div className="alert alert-danger">
         <pre>{JSON.stringify(error, null, 2)}</pre>
       </div>}
+
+      <SearchApp />
     </div>
   );
 };
