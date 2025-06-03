@@ -3,6 +3,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 
 export const App = () => {
   const [documentUrl, setDocumentUrl] = useState("");
+  const [error, setError] = useState(null);
   const [response, setResponse] = useState("");
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef(null);
@@ -32,7 +33,7 @@ export const App = () => {
       const datares = await res.json();
       setResponse(datares);
     } catch (err) {
-      setResponse("Chyba při odesílání: " + err);
+      setError(err);
     } finally {
       setLoading(false);
     }
@@ -71,9 +72,12 @@ export const App = () => {
           {loading ? "Odesílám..." : "Odeslat"}
         </button>
       </form>
-      <div >
+      <div className="alert alert-success">
         <pre>{JSON.stringify(response, null, 2)}</pre>
-        </div>
+      </div>
+      {error && <div className="alert alert-danger">
+        <pre>{JSON.stringify(error, null, 2)}</pre>
+      </div>}
     </div>
   );
 };

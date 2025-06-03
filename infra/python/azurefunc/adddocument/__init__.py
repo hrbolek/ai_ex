@@ -108,6 +108,18 @@ def index_documents_batch(
     result = client.upload_documents(documents)
     logging.info(f"Upload result: {result}")
 
+def make_json_response(payload, status_code=200):
+    jsondocument = {
+        "payload": payload,
+        "env": {key: os.getenv(key, None) for key in ENV_KEY_NAMES.keys()}
+
+    }
+    return func.HttpResponse(
+        json.dumps(jsondocument, ensure_ascii=False),
+        mimetype="application/json",
+        status_code=status_code
+    )
+
 def main(req: func.HttpRequest) -> func.HttpResponse:
     try:
         # načtení konfigurace z env vars
