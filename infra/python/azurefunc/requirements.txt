@@ -17,3 +17,5 @@ azure-identity
 azure-core
 azure-data-tables
 numpy
+
+semantic_kernel

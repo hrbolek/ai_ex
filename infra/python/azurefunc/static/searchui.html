@@ -14,6 +14,7 @@
   <script src="https://unpkg.com/htm@2.2.1" crossorigin></script>
 
   <script src="https://unpkg.com/@reduxjs/toolkit@1.9.3/dist/redux-toolkit.umd.js"></script>
+  <script src="https://unpkg.com/react-markdown@7.0.1/react-markdown.min.js"></script>
 </head>
 
 <body>
@@ -26,13 +27,25 @@
         <div id="root"></div>
     </div>
 
+
+    <script  type="module">
+      // import * as all from "https://unpkg.com/react-markdown@7.0.1/react-markdown.min.js";
+      // console.log(all.ReactMarkdown)
+      // console.log(all)
+      // console.log(Object.keys(all))
+      // console.log("ReactMarkdown")
+      // console.log(ReactMarkdown)
+      // let Markdown = ReactMarkdown.default
+      // console.log("Markdown")
+      // console.log(Markdown)
+    </script>
     <script type="text/babel">
         
-        const { useState, useRef } = React;
+        const { useState, useRef, useEffect } = React;
         const { configureStore, createSlice } = RTK;
         console.log("React", JSON.stringify(React))
         
-
+        let Markdown = ReactMarkdown.default
 
 const DocumentsDisplay = ({data}) => {
 // Handle case where data is null/undefined or documents doesn't exist
@@ -43,10 +56,13 @@ const DocumentsDisplay = ({data}) => {
   const sortedDocs = docs.sort((a, b) => b.score - a.score) || []
 return (
     <div className="p-6 max-w-4xl mx-auto">
-      
-      <p className="text-gray-600 text-base">({data.summary})</p>
+      <Markdown>{data.summary}</Markdown>
+      {false && <div>
+      <p className="text-gray-600 text-base">
+        ({data.summary})</p>
       <p className="text-2xl font-bold mb-4">Počet dokumentů ({data.documents.length})</p>
-      <ul>
+      </div>}
+      {false && <ul>
         {sortedDocs.map((document, index) => (
           <li key={index}>
             <a 
@@ -59,10 +75,25 @@ return (
             <span className="text-gray-600">({document.score} skóre)</span>
           </li>
         ))}
-      </ul>
+      </ul>}
     </div>
   );
 };
+
+const PremyslimDots = () => {
+  const [dots, setDots] = useState("");
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDots(prev => (prev.length < 3 ? prev + "." : ""));
+    }, 400);
+    return () => clearInterval(interval);
+  }, []);
+  return (
+    <div style={{ fontSize: "2rem", fontWeight: "bold", color: "#007bff" }}>
+      Přemýšlím{dots}
+    </div>
+  );
+}
 
 const SearchApp = () => {
   const [searchText, setSearchText] = useState("");
@@ -95,7 +126,8 @@ const SearchApp = () => {
         <h2 className="text-2xl font-bold mb-4">Vyhledávání v dokumentech</h2>
         <div className="flex flex-column align-items-center">
           <div >
-            {isLoading ? <div>Načítám</div> : <div >
+            <Markdown>Hello</Markdown>
+            <div >
                 <input
                   type="text"
                   className="form-control"
@@ -111,7 +143,7 @@ const SearchApp = () => {
 
                 <button className='btn btn-outline-success' disabled={searchText.length === 0} label="Vyhledat" onClick={search} >Vyhledat</button>
               </div>
-            }
+            {isLoading && <PremyslimDots />}
           </div>
         </div>
         {/*<pre>{JSON.stringify(result, null, 2)}</pre>*/}

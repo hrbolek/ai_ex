@@ -57,7 +57,7 @@ def search_by_vector(
     service_name: str,
     index_name: str,
     api_key: str,
-    top: int = 5
+    top: int = 10
 ) -> list[dict]:
     """
     Provede vektorové vyhledávání nad indexem.
@@ -120,7 +120,7 @@ def generate_summary(
     prompt = (
         f"Na základě následujících textů odpověz na dotaz:\n{query}\n\n"
         f"Texty:\n{context}\n\n"
-        "Ve své odpovědi odkáž na zdroje [1], [2], ... a na konci uveď jejich seznam s URL."
+        "Ve své odpovědi odkazuj na zdroje [1], [2], ... a na konci uveď jejich seznam s URL."
     )
 
     response = client.chat.completions.create(model=model_name, messages=[
@@ -128,7 +128,7 @@ def generate_summary(
             {"role": "user",   "content": prompt},
         ],
         temperature=0.3,
-        max_tokens=500)
+        max_tokens=1000)
 
     return response.choices[0].message.content
 
@@ -270,7 +270,7 @@ def find_additional_accessible_documents(user_token: str, max_count: int = 10) -
 # --- AZURE FUNCTION ------------------------------------------
 import base64
 
-def main(req: func.HttpRequest) -> func.HttpResponse:
+def searchdocumenthandler(req: func.HttpRequest) -> func.HttpResponse:
 
     # # autentizacni udaje, pokud je nastavena autentizace pomoci entra id ...
     # principal_b64 = req.headers.get('x-ms-client-principal', None)
@@ -353,3 +353,6 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as e:
         logging.exception(e)
         return func.HttpResponse("Internal server error.", status_code=500)
+
+
+print("import search OK")

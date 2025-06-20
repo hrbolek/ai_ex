@@ -1,66 +1,42 @@
-# Getting Started with Create React App
+Container apps
+Container Apps Environment
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+from azure.identity import DefaultAzureCredential
+from azure.mgmt.containerinstance import ContainerInstanceManagementClient
+from azure.mgmt.containerinstance.models import (ContainerGroup, Container, ResourceRequests, ResourceRequirements, ImageRegistryCredential, OperatingSystemTypes, IpAddress, Port, ContainerGroupNetworkProtocol)
 
-## Available Scripts
+SUBSCRIPTION_ID = "tvuj-subscription-id"
+RESOURCE_GROUP = "jmeno-resource-group"
+CONTAINER_GROUP_NAME = "moje-container-app"
+LOCATION = "westeurope"
 
-In the project directory, you can run:
+IMAGE = "dockerhubuser/myimage:latest"  # např. "library/nginx:latest"
+CONTAINER_PORT = 80  # změň podle potřeby
 
-### `npm start`
+credential = DefaultAzureCredential()
+client = ContainerInstanceManagementClient(credential, SUBSCRIPTION_ID)
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+container_resource_requests = ResourceRequests(memory_in_gb=1.0, cpu=1.0)
+container_resource_requirements = ResourceRequirements(requests=container_resource_requests)
+container = Container(
+    name=CONTAINER_GROUP_NAME,
+    image=IMAGE,
+    resources=container_resource_requirements,
+    ports=[Port(protocol=ContainerGroupNetworkProtocol.tcp, port=CONTAINER_PORT)],
+)
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+group = ContainerGroup(
+    location=LOCATION,
+    containers=[container],
+    os_type=OperatingSystemTypes.linux,
+    ip_address=IpAddress(
+        ports=[Port(protocol=ContainerGroupNetworkProtocol.tcp, port=CONTAINER_PORT)],
+        type="Public"
+    ),
+    restart_policy="Always"
+)
 
-### `npm test`
+# Vytvoření/aktualizace instance
+client.container_groups.begin_create_or_update(RESOURCE_GROUP, CONTAINER_GROUP_NAME, group).result()
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
-
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
-
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
-
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-
-## Deployment using bicep
-
-Create Resource group e.g. rg-semanticindexinfra
-Copy parameters.json e.g. parameters-prod.json
-Update the parameters (location etc.)
-
-az deployment group create  --resource-group rg-semanticindexinfra --template-file main.bicep --parameters  parameters.json
-
-
-Start react
-npm run start
-
-Start Api in api Folder
-func start --debug
-
-Combine it with SWA
-swa start http://localhost:3000 -api https://localhost:7071
-
+print("Hotovo! Container běží.")

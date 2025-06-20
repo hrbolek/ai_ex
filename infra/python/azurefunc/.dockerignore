@@ -1,0 +1,58 @@
+# Obecné Python ignorace
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+.venv/
+*.env
+*.egg-info/
+.eggs/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Testovací a build složky
+build/
+dist/
+.coverage
+.tox/
+.nox/
+.pytest_cache/
+.pyre/
+.mypy_cache/
+
+# Editor/IDE soubory
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# OS soubory
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Azure Functions tooling
+.local.settings.json
+# (obsahuje connection stringy a secrets, nechcete v image!)
+
+# Docker artefakty
+Dockerfile
+docker-compose.yml
+docker-compose.*.yml
+
+# Logy
+*.log
+
+# VS Code debug
+.vscode/
+.history/
+
+# Azure artifacts
+*.azure-functions/

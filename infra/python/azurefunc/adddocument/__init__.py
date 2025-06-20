@@ -100,7 +100,7 @@ def make_json_response(payload, status_code=200):
         status_code=status_code
     )
 
-def main(req: func.HttpRequest) -> func.HttpResponse:
+def adddocumenthandler(req: func.HttpRequest) -> func.HttpResponse:
     try:
         # načtení konfigurace z env vars
         search_service  = getenv("AZURE_SEARCH_SERVICE_NAME", None)
@@ -194,3 +194,6 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         msg = f"Internal server error: {ex}"
         logging.exception(msg)
         return make_json_response({"success": False, "message": msg}, status_code=500)
+
+
+print("import adddocument OK")

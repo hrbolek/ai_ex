@@ -36,7 +36,7 @@ ENV_KEY_NAMES = {
 }
 
 ENV_VARIABLES = {
-
+    "SCM_DO_BUILD_DURING_DEPLOYMENT": True
 }
 
 def storeenv(key_name, value):
@@ -116,6 +116,10 @@ def zip_function_code(source_dir: str, zip_path: str):
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
         for file_path in source_dir.rglob("*"):
             if file_path.is_file():
+                if any(part in file_path.parts for part in ["__pycache__", ".venv", ".git"]):
+                    continue
+                if file_path.name.endswith((".pyc", ".DS_Store")):
+                    continue
                 arcname = file_path.relative_to(source_dir)
                 zipf.write(file_path, arcname)
     print(f"✅ Kód funkcí byl zabalen do '{zip_path}'.")
@@ -668,7 +672,9 @@ def main():
           # cognitive_account_endpoint = account.properties.endpoint
           """)
     print("env variables")
-    print(ENV_VARIABLES)
+    print(f"{ENV_VARIABLES}".replace("'", '"'))
+    for key, value in ENV_VARIABLES.items():
+        print(f"{key}={value}")
 
 
 if __name__ == "__main__":

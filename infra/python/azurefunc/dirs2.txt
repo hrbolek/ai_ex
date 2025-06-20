@@ -1,0 +1,129 @@
+ Volume in drive C is Syst‚m
+ Volume Serial Number is 346D-3C2C
+
+ Directory of C:\_develop\_azure\semanticindexreact\infra\python\azurefunc
+
+07.06.2025  08:18    <DIR>          .
+07.06.2025  08:18    <DIR>          ..
+07.06.2025  08:29    <DIR>          adddocument
+02.06.2025  16:33                 0 description.md
+02.06.2025  16:33               523 dirs.txt
+07.06.2025  08:37                 0 dirs2.txt
+03.06.2025  20:46               780 Dockerfile
+03.06.2025  17:56               302 host.json
+04.06.2025  21:07               722 local.settings.json
+07.06.2025  08:29    <DIR>          removedocument
+07.06.2025  07:20               232 requirements.txt
+07.06.2025  08:29    <DIR>          search
+07.06.2025  08:29    <DIR>          search_with_kernels
+07.06.2025  08:29    <DIR>          static
+06.06.2025  06:46             3ÿ992 __doc_update.py
+07.06.2025  08:32               936 __init__.py
+06.06.2025  06:30    <DIR>          __pycache__
+               9 File(s)          7ÿ487 bytes
+
+ Directory of C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\adddocument
+
+07.06.2025  08:29    <DIR>          .
+07.06.2025  08:29    <DIR>          ..
+03.06.2025  08:58               311 _function.txt
+03.06.2025  14:20             7ÿ454 __init__.py
+03.06.2025  15:29    <DIR>          __pycache__
+               2 File(s)          7ÿ765 bytes
+
+ Directory of C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\adddocument\__pycache__
+
+03.06.2025  15:29    <DIR>          .
+03.06.2025  15:29    <DIR>          ..
+03.06.2025  15:29            10ÿ352 __init__.cpython-311.pyc
+               1 File(s)         10ÿ352 bytes
+
+ Directory of C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\removedocument
+
+07.06.2025  08:29    <DIR>          .
+07.06.2025  08:29    <DIR>          ..
+02.06.2025  16:33               297 _function.txt
+07.06.2025  08:35             4ÿ523 __init__.py
+03.06.2025  13:54    <DIR>          __pycache__
+               2 File(s)          4ÿ820 bytes
+
+ Directory of C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\removedocument\__pycache__
+
+03.06.2025  13:54    <DIR>          .
+03.06.2025  13:54    <DIR>          ..
+03.06.2025  13:54             5ÿ544 __init__.cpython-311.pyc
+               1 File(s)          5ÿ544 bytes
+
+ Directory of C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\search
+
+07.06.2025  08:29    <DIR>          .
+07.06.2025  08:29    <DIR>          ..
+02.06.2025  16:33               297 _function.txt
+07.06.2025  08:35            13ÿ728 __init__.py
+06.06.2025  08:34    <DIR>          __pycache__
+               2 File(s)         14ÿ025 bytes
+
+ Directory of C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\search\__pycache__
+
+06.06.2025  08:34    <DIR>          .
+06.06.2025  08:34    <DIR>          ..
+06.06.2025  08:34            14ÿ524 __init__.cpython-311.pyc
+               1 File(s)         14ÿ524 bytes
+
+ Directory of C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\search_with_kernels
+
+07.06.2025  08:29    <DIR>          .
+07.06.2025  08:29    <DIR>          ..
+07.06.2025  07:44               213 AccessControlSkill.py
+07.06.2025  07:58             1ÿ037 AzureSearchSkill.py
+07.06.2025  07:54             1ÿ976 EmbeddingSkill.py
+07.06.2025  07:58             1ÿ042 SummarizationSkill.py
+02.06.2025  16:33               297 _function.txt
+07.06.2025  08:35             1ÿ987 __init__.py
+07.06.2025  07:58    <DIR>          __pycache__
+               6 File(s)          6ÿ552 bytes
+
+ Directory of C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\search_with_kernels\__pycache__
+
+07.06.2025  07:58    <DIR>          .
+07.06.2025  07:58    <DIR>          ..
+07.06.2025  07:44               632 AccessControlSkill.cpython-311.pyc
+07.06.2025  07:58             2ÿ143 AzureSearchSkill.cpython-311.pyc
+07.06.2025  07:58             2ÿ610 EmbeddingSkill.cpython-311.pyc
+07.06.2025  07:58             2ÿ106 SummarizationSkill.cpython-311.pyc
+07.06.2025  07:58             3ÿ258 __init__.cpython-311.pyc
+               5 File(s)         10ÿ749 bytes
+
+ Directory of C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\static
+
+07.06.2025  08:29    <DIR>          .
+07.06.2025  08:29    <DIR>          ..
+03.06.2025  16:35             1ÿ110 HTML_creator.py
+06.06.2025  08:44             8ÿ478 result.py
+06.06.2025  08:43             8ÿ467 searchui.html
+02.06.2025  16:33               297 _function.txt
+07.06.2025  08:35             1ÿ078 __init__.py
+06.06.2025  08:44    <DIR>          __pycache__
+               5 File(s)         19ÿ430 bytes
+
+ Directory of C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\static\__pycache__
+
+06.06.2025  08:44    <DIR>          .
+06.06.2025  08:44    <DIR>          ..
+03.06.2025  16:36             2ÿ036 HTML_creator.cpython-311.pyc
+06.06.2025  08:44             8ÿ406 result.cpython-311.pyc
+03.06.2025  17:25               734 __init__.cpython-311.pyc
+               3 File(s)         11ÿ176 bytes
+
+ Directory of C:\_develop\_azure\semanticindexreact\infra\python\azurefunc\__pycache__
+
+06.06.2025  06:30    <DIR>          .
+06.06.2025  06:30    <DIR>          ..
+06.06.2025  06:30            46ÿ567 six.cpython-311.pyc
+06.06.2025  06:30           177ÿ973 typing_extensions.cpython-311.pyc
+03.06.2025  19:00             1ÿ241 __init__.cpython-311.pyc
+               3 File(s)        225ÿ781 bytes
+
+     Total Files Listed:
+              40 File(s)        338ÿ205 bytes
+              35 Dir(s)  468ÿ467ÿ122ÿ176 bytes free

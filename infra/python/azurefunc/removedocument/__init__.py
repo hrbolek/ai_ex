@@ -63,7 +63,7 @@ def delete_by_ids(
 
 # --- AZURE FUNCTION ------------------------------------------
 
-def main(req: func.HttpRequest) -> func.HttpResponse:
+def removedocumenthandler(req: func.HttpRequest) -> func.HttpResponse:
     try:
         # 1) načtení konfigurace
         service_name = getenv("AZURE_SEARCH_SERVICE_NAME", "")
@@ -131,3 +131,6 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             "Internal server error.",
             status_code=500
         )
+
+
+print("import remodocument OK")

@@ -25,7 +25,7 @@ from .result import HTML
 # html_content = html_content.replace("$STYLE$", css_content)
 # html_content = html_content.replace("$SCRIPT$", js_content)
 
-def main(req: func.HttpRequest) -> func.HttpResponse:
+def statichandler(req: func.HttpRequest) -> func.HttpResponse:
 
         
     html = HTML.replace('*/', '*/\n')
@@ -34,3 +34,6 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
         mimetype="text/html",
         status_code=200
     )
+
+
+print("import static OK")
