@@ -24,3 +24,5 @@ yarn-error.log*
 local.settings.json
 __pycache__
 //__doc_update.py
+
+local.env.txt
