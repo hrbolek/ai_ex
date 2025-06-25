@@ -118,18 +118,35 @@ def generate_summary(
     )
 
     # Sestavíme prompt
+    urls = []
+    joined_fragments = {}
+    for index, document_data in enumerate(docs):
+        if document_data['document_folder'] == "":
+            continue
+        if document_data['document_folder'] not in urls:
+            urls.append(document_data['document_folder'])
+        if document_data['document_folder'] not in joined_fragments:
+            joined_fragments[document_data['document_folder']] = "**source url**\n\n" + document_data['document_folder'] + "\n\n**content**\n\n" + document_data['content']
+        else:
+            joined_fragments[document_data['document_folder']] += "\n" + document_data['content']
+                        
+    # context = "\n\n".join(
+    #     f"[{i+1}] {d['content']}\nSource: {d['document_folder']}\n\n"
+    #     for i, d in enumerate(docs)
+    # )
+
     context = "\n\n".join(
-        f"[{i+1}] {d['content']}\nSource: {d['document_folder']}"
-        for i, d in enumerate(docs)
+        f"[{index + 1}] \n# Document \n\n{joined_fragments[url]}"
+        for index, url in enumerate(urls)
     )
     prompt = (
         f"Na základě následujících textů odpověz na dotaz:\n{query}\n\n"
         f"Texty:\n{context}\n\n"
-        "Ve své odpovědi odkazuj na zdroje [1], [2], ... a na konci uveď jejich seznam s URL."
+        "Ve své odpovědi odkazuj na zdroje [1], [2], ... a na konci uveď jejich seznam s URL. Pozor, v URL mohou být tečky navíc"
     )
 
     response = client.chat.completions.create(model=model_name, messages=[
-            {"role": "system", "content": "Jsi nápomocný asistent, cituj zdroje."},
+            {"role": "system", "content": "Jsi nápomocný asistent pro zaměstnance vysoké školy, cituj zdroje."},
             {"role": "user",   "content": prompt},
         ],
         temperature=0.3,

@@ -8,28 +8,34 @@ FROM python:3.11-slim-bookworm AS pythonbase
 # instalace curl, aby bylo mozne zprovoznit standardni healthcheck
 RUN apt update && apt install curl -y && rm -rf /var/cache/apk/*
 
+WORKDIR /app
 # Install pip requirements
 COPY ./backend/requirements.txt .
 RUN python -m pip install -r requirements.txt
 
 FROM node:20.19-alpine AS nodebase
 
+WORKDIR /
 COPY package.json .
+COPY vite.config.js .
 RUN npm install
 
-COPY frontend/ /frontend
+WORKDIR /frontend
+COPY frontend .
 RUN npm run build
 
 FROM pythonbase AS pythonfinal
 
-COPY --from=nodebase /app/dev/ ./static
+WORKDIR /backend
 COPY backend/ .
+COPY --from=nodebase /frontend/out ./static
 
-RUN useradd appuser && chown -R appuser /app
-USER appuser
+WORKDIR /
+# # RUN useradd appuser && chown -R appuser /app
+# # USER appuser
 
-# During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
-#CMD ["gunicorn", "--reload=True", "--bind", "0.0.0.0:8000", "-k", "uvicorn.workers.UvicornWorker", "app:app"]
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "-t", "60", "-k", "uvicorn.workers.UvicornWorker", "main:app"]
+# # During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
+# #CMD ["gunicorn", "--reload=True", "--bind", "0.0.0.0:8000", "-k", "uvicorn.workers.UvicornWorker", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "-t", "60", "-k", "uvicorn.workers.UvicornWorker", "backend.main:app"]
 
 EXPOSE 8000

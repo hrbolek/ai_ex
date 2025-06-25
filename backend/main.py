@@ -2,19 +2,65 @@ import os
 import json
 import uuid
 import asyncio
+import typing
 import fastapi 
 import jwt
 import aiohttp
+
 from fastapi import FastAPI, Request, Depends
-from fastapi.responses import RedirectResponse
-from authlib.integrations.starlette_client import OAuth
+from fastapi.responses import RedirectResponse, FileResponse
+# from authlib.integrations.starlette_client import OAuth
 import os
 import logging
+
+import strawberry.fastapi
 
 logging.basicConfig(
     level=logging.INFO,     # nebo DEBUG, pokud chceš detailnější logy
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 )
+
+import functools
+import datetime
+def limitedCache(func):
+    storage = {
+        "counter": 0,
+        "datetime": datetime.datetime.now()
+    }
+
+    def wrapped(old_cache_func):
+        storage["counter"] += 1
+        now = datetime.datetime.now()
+        delta: datetime.timedelta = now - storage["datetime"]
+        if delta.seconds > 60:
+            storage["datetime"] = now
+            return functools.cache(func)
+        else:
+            return old_cache_func
+        
+    return wrapped
+    
+def lcache(f):
+    storage = {
+        "counter": 0,
+        "result": None,
+        "datetime": datetime.datetime.now()
+    }
+    def wrapped():
+        counter = storage["counter"] + 1
+        result = storage["result"]
+        now = datetime.datetime.now()
+        delta: datetime.timedelta = now - storage["datetime"]
+        if (delta.seconds > 60) or (counter > 100) or (result is No):
+            result = f()
+            storage["datetime"] = now
+            storage["result"] = result
+            storage["counter"] = 0
+            return result
+        else:
+            storage["counter"] = counter
+            return storage["result"]
+    return wrapped
 
 app = FastAPI()
 @app.get("/health")
@@ -34,21 +80,19 @@ token_database = {}
 def prejson(data):
     return json.dumps(data, indent=4, ensure_ascii=False)
 
+tenant_id = os.getenv("AZURE_TENANT_ID")
+jwks_url = f"https://login.microsoftonline.com/{tenant_id}/discovery/v2.0/keys"
+jwk_client = jwt.PyJWKClient(jwks_url)
+
 def decodeJWTToken_sync(jwt_token):
-    from jwt import PyJWKClient
     if isinstance(jwt_token, bytes):
         jwt_token = jwt_token.decode("utf-8")
     if not isinstance(jwt_token, str):
         raise ValueError("JWT token must be a string or bytes")
 
     # Ověření pomocí veřejného klíče z Azure
-    tenant_id = os.getenv("AZURE_TENANT_ID")
     client_id = os.getenv("AZURE_CLIENT_ID")
     issuer = f"https://login.microsoftonline.com/{tenant_id}/v2.0"
-    jwks_url = f"https://login.microsoftonline.com/{tenant_id}/discovery/v2.0/keys"
-
-    # Získání správného klíče pro podpis
-    jwk_client = PyJWKClient(jwks_url)
     signing_key = jwk_client.get_signing_key_from_jwt(jwt_token)
 
     decoded = jwt.decode(
@@ -65,6 +109,26 @@ async def decodeJWTToken(jwt_token):
     decoded_token = await asyncio.to_thread(decodeJWTToken_sync, jwt_token)
     return decoded_token
     
+async def logged_user_id(request):
+    access_token = request.cookies.get("authorization")
+    token_data = token_database.get(access_token)
+    user_id = None
+    if token_data:
+        jwt_token = token_data["token_data"].get("id_token") or token_data["token_data"].get("access_token")
+        if jwt_token:
+            decoded_token = await decodeJWTToken(jwt_token)
+            user_id = decoded_token.get("oid")
+    return user_id
+
+async def is_user_logged(request):
+    access_token = request.cookies.get("authorization")
+    token_data = token_database.get(access_token)
+    result = None
+    if token_data:
+        jwt_token = token_data["token_data"].get("id_token") or token_data["token_data"].get("access_token")
+        if jwt_token:
+            result = await decodeJWTToken(jwt_token)
+    return result
 
 @app.get("/")
 async def homepage(request: Request):
@@ -77,6 +141,9 @@ async def homepage(request: Request):
         if jwt_token:
             decoded_token = await decodeJWTToken(jwt_token)
             message = f"<pre>token{prejson(decoded_token)}</pre>"
+
+            return FileResponse(serve_file(""))
+
         else:
             message = "<pre>token not found in token_data</pre>"
 
@@ -209,6 +276,16 @@ async def logout(request: Request):
 import strawberry
 from strawberry.fastapi import GraphQLRouter
 
+async def get_context(
+    self, request: typing.Union[Request, fastapi.WebSocket], response: typing.Union[fastapi.Response, fastapi.WebSocket]
+) :  # pragma: no cover -> strawberry.fastapi.fastapi.BaseContext
+    authcookie = request.cookies.get("authorization")
+    return {
+        "request": Request,
+
+    }
+    # raise ValueError("`get_context` is not used by FastAPI GraphQL Router")
+
 from .gql import schema
 graphql_app = GraphQLRouter(
     schema=schema, 
@@ -223,3 +300,15 @@ graphql_app = GraphQLRouter(
 #     return FILE_PATH
 
 app.include_router(graphql_app, prefix="/gql")
+
+
+def serve_file(relative):
+    if relative == "":
+        relative = "frontend/index.html"
+    FILE_PATH = os.path.join(os.path.dirname(__file__), "static", relative)
+    return FILE_PATH
+ 
+from fastapi.staticfiles import StaticFiles
+app.mount("/assets", StaticFiles(directory="backend/static/assets"), name="static")
+# @app.get("/assets")
+# async def serve_assets

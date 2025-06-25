@@ -14,11 +14,18 @@ azure-mgmt-web
 azure-storage-blob
 azure-mgmt-cognitiveservices
 
+azure-functions
+azure-search-documents
+azure-core
+azure-data-tables
+
 openai
 
 fastapi[all]
 uvicorn[standard]
 gunicorn
+
+strawberry-graphql
 
 python-multipart
 aiohttp

@@ -77,7 +77,7 @@ export default defineConfig({
 
   // Build options
   build: {
-    outDir: './backend/static', // změní výstupní složku buildu
+    outDir: './frontend/out', // změní výstupní složku buildu
     rollupOptions: {
       input: {
         main: './frontend/index.html',
