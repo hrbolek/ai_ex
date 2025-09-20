@@ -31,3 +31,7 @@ python-multipart
 aiohttp
 requests
 pyjwt[crypto]
+
+sqlalchemy
+prometheus_client
+https://github.com/hrbolek/uoishelpers/archive/refs/heads/main.zip

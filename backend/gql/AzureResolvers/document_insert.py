@@ -109,9 +109,12 @@ def document_insert(url, filename, stream):
     # batch generování embeddingů
     embeddings = [generate_embedding(chunk) for chunk in chunks]
     
+    #TODO udelat sumarizaci chunku a vlozit ji do indexu pro potreby popisu pri interakci s uzivatelem
+    #TODO strom chunku, napr tri urovne pro presnejsi lokalizaci casti dokumentu, ktera je pro dotaz relevantni, tedy chunks from chunk
 
     # příprava dokumentů pro index
     docs = []
+    #TODO osetrit, pokud je v nazvu pouzita tecka, napr. Statut ve zneni 1. zmeny.pdf
     filename = filename.split(".")[0].encode("ascii", errors="ignore").decode().replace(" ", "")
 
     for i, (chunk, emb) in enumerate(zip(chunks, embeddings), start=1):

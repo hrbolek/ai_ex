@@ -1,29 +1,55 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { createClient } from 'graphql-ws';
 
-export function useGraphQLSubscription({ query, variables, url, onData }) {
-    const [data, setData] = useState();
-    const [error, setError] = useState();
+export function useGraphQLSubscription({ url, query, variables, onData }) {
+  const [error, setError] = useState(null);
+  const onDataRef = useRef(onData);
+  const varsRef = useRef(variables);
+  const queryRef = useRef(query);
 
-    useEffect(() => {
-        const wsClient = createClient({ url });
+  // keep refs up to date
+  useEffect(() => {
+    onDataRef.current = onData;
+  }, [onData]);
 
-        const onData_ = (result) => {
-            setData(old => result.data)
-            (onData && onData(result))
-        }
+  useEffect(() => {
+    queryRef.current = query;
+  }, [query]);
 
-        const unsubscribe = wsClient.subscribe(
-        { query, variables },
-        {
-            next: onData_,
-            error: setError,
-            complete: () => {},
-        }
-        );
-        return () => unsubscribe();
-    }, [query, variables, url, onData]);
+  useEffect(() => {
+    varsRef.current = variables;
+  }, [variables]);
 
-    return { data, error };
+  useEffect(() => {
+    const wsClient = createClient({ url });
+    const unsubscribe = wsClient.subscribe(
+      () => ({
+        query: queryRef.current,
+        variables: varsRef.current,
+      }),
+      {
+        next: result => {
+          try {
+            onDataRef.current(result);
+          } catch (e) {
+            console.error("Error in onData handler", e);
+          }
+        },
+        error: err => {
+          console.error("WSSubscription error", err);
+          setError(err);
+        },
+        complete: () => {
+          // completed
+        },
+      }
+    );
+
+    return () => {
+      unsubscribe();
+      wsClient.dispose();
+    };
+  }, [url]);
+
+  return { error };
 }
-

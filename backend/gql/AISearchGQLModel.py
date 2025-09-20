@@ -7,14 +7,14 @@ import urllib.parse
 from .shared import IDType, get_user_from_info
 from .SubscriptionChannels import get_user_channels, get_channel_queue
 from .DocumentGQLModel import DocumentFragmentGQLModel, DocumentGQLModel
-from .MessageGQLModel import MessageGQLModel
+from .AIMessageGQLModel import AIMessageGQLModel
 
 from .AzureResolvers import searchdocumenthandler_, sumarize_
 
 @strawberry.type(
     description="result of search by natural language"
 )
-class SearchGQLModel:
+class AISearchGQLModel:
     
     document_fragments: typing.List[DocumentFragmentGQLModel] = strawberry.field(
         description="fragments retrieved during search"
@@ -31,7 +31,7 @@ class SearchGQLModel:
 @strawberry.input(
     description="input for the search"
 )
-class SearchInputGQLModel:
+class AISearchInputGQLModel:
     query: str = strawberry.field(
         description="text of the query"
     )
@@ -39,7 +39,7 @@ class SearchInputGQLModel:
 @strawberry.interface(
     description=""
 )
-class SearchQuery:
+class AISearchQuery:
     @classmethod
     def search(cls, query: str):
         pass
@@ -47,18 +47,19 @@ class SearchQuery:
     @strawberry.field(
         description="query the index and return summary"
     )
-    async def search_by_text(self, info: strawberry.types.Info, search: SearchInputGQLModel) -> typing.Optional[SearchGQLModel]:
+    async def search_by_text(self, info: strawberry.types.Info, search: AISearchInputGQLModel) -> typing.Optional[AISearchGQLModel]:
         user = get_user_from_info(info=info)
         user_id = user["id"]
         # channels = get_user_channels(user_id=user_id, )
         queue: asyncio.Queue = get_channel_queue(user_id=user_id, channel_id="ba05ce5d-5bbe-4847-bc44-d4b4b2c94771")
         await queue.put(
-            MessageGQLModel(msg=f"Připravuji odpověď na '{search.query}'. Podívám se do dokumentů", attachments=[])
+            AIMessageGQLModel(msg=f"Připravuji odpověď na '{search.query}'. Podívám se do dokumentů", attachments=[])
         )
         docs_found = await asyncio.to_thread(searchdocumenthandler_, query=search.query)
-        urls = {doc["document_folder"] for doc in docs_found}
+        urls = list(dict.fromkeys(doc["document_folder"] for doc in docs_found))
+        # urls = {doc["document_folder"] for doc in docs_found}
         print(f"urls {urls}")
-        documents = [DocumentGQLModel(url=url) for url in urls]
+        documents = [DocumentGQLModel(url=url) for url in urls if url]
             #     docs.append({
             # "id":              r.get("id"),
             # "content":         r.get("content", ""),
@@ -70,12 +71,17 @@ class SearchQuery:
         # md_message = f"""### Nalezené soubory{eoln}{eoln}- {eoln+'- '.join(urls)}"""
         md_message = """### Nalezené dokumenty\n\n"""
         for url in urls:
+            if not url:
+                continue
             fname = urllib.parse.unquote(url.split("/")[-1])
             md_link = f"[{fname}]({url})"
-            md_message += f"- {md_link}" + "\n"
+            md_message += f"1. {md_link}" + "\n\n"
+            # fragments = [f'{doc["content"][:1000]}' for doc in docs_found if doc["document_folder"] == url]
+            # md_message += "\n ...".join(fragments)
+            # md_message += "\n\n"
 
         await queue.put(
-            MessageGQLModel(msg=md_message, attachments=[doc for doc in documents])
+            AIMessageGQLModel(msg=md_message, attachments=[doc for doc in documents])
         )
 
         #         payload = {
@@ -87,7 +93,7 @@ class SearchQuery:
         summary_result = await asyncio.to_thread(sumarize_, query=search.query, docs=docs_found)
         print(f"sumary_result\n{summary_result}")
         await queue.put(
-            MessageGQLModel(msg=summary_result["summary"], attachments=[])
+            AIMessageGQLModel(msg=summary_result["summary"], attachments=[])
         )
 
         return None

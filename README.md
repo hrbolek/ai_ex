@@ -40,3 +40,8 @@ group = ContainerGroup(
 client.container_groups.begin_create_or_update(RESOURCE_GROUP, CONTAINER_GROUP_NAME, group).result()
 
 print("Hotovo! Container běží.")
+
+
+```bash
+uvicorn backend.main:app --app-dir backend --env-file environment.txt --port 8001
+```

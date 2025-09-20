@@ -111,6 +111,8 @@ def generate_summary(
     account = getenv("AZURE_COGNITIVE_ACCOUNT_NAME", "")
     model_name = getenv("AZURE_CHAT_DEPLOYMENT_NAME", "") or "summarization-deployment"
     endpoint = f"https://{account}.openai.azure.com"
+    from collections import defaultdict
+
     client = AzureOpenAI(
         azure_endpoint=endpoint,
         api_key=api_key,
@@ -118,39 +120,37 @@ def generate_summary(
     )
 
     # Sestavíme prompt
+    joined_fragments = defaultdict(list)
     urls = []
-    joined_fragments = {}
-    for index, document_data in enumerate(docs):
-        if document_data['document_folder'] == "":
-            continue
-        if document_data['document_folder'] not in urls:
-            urls.append(document_data['document_folder'])
-        if document_data['document_folder'] not in joined_fragments:
-            joined_fragments[document_data['document_folder']] = "**source url**\n\n" + document_data['document_folder'] + "\n\n**content**\n\n" + document_data['content']
-        else:
-            joined_fragments[document_data['document_folder']] += "\n" + document_data['content']
-                        
-    # context = "\n\n".join(
-    #     f"[{i+1}] {d['content']}\nSource: {d['document_folder']}\n\n"
-    #     for i, d in enumerate(docs)
-    # )
 
-    context = "\n\n".join(
-        f"[{index + 1}] \n# Document \n\n{joined_fragments[url]}"
-        for index, url in enumerate(urls)
-    )
+    for doc in docs:
+        url = doc.get("document_folder") or ""
+        if not url:
+            continue
+        if url not in urls:
+            urls.append(url)
+        joined_fragments[url].append(doc.get("content", ""))
+
+    context = ""
+    for idx, url in enumerate(urls, start=1):
+        doc_content = "\n".join(joined_fragments[url])
+        context += f"[{idx}] Zdroj: {url}\n{doc_content}\n\n"
+
     prompt = (
         f"Na základě následujících textů odpověz na dotaz:\n{query}\n\n"
-        f"Texty:\n{context}\n\n"
-        "Ve své odpovědi odkazuj na zdroje [1], [2], ... a na konci uveď jejich seznam s URL. Pozor, v URL mohou být tečky navíc"
+        f"Texty:\n{context}\n"
+        "Ve své odpovědi odkazuj na zdroje [1], [2], ... a na konci uveď jejich seznam s URL, vynech dokumenty, které jsi nepoužil"
     )
 
-    response = client.chat.completions.create(model=model_name, messages=[
+    response = client.chat.completions.create(
+        model=model_name,
+        messages=[
             {"role": "system", "content": "Jsi nápomocný asistent pro zaměstnance vysoké školy, cituj zdroje."},
             {"role": "user",   "content": prompt},
         ],
         temperature=0.3,
-        max_tokens=1000)
+        max_tokens=1000
+    )
 
     return response.choices[0].message.content
 

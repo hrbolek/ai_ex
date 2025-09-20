@@ -1,0 +1,245 @@
+
+<message role="system">
+    You can pair objects mentioned by the user with GraphQL types described in the JSON below.
+    Analyze the user prompt and return only valid JSON: an array of strings, each exactly matching a type's `name`.
+    Respond with a single JSON array—no additional text, no code fences.
+
+    Rules:
+    1. Exclude any types whose names end with `"Error"`, unless explicitly requested.
+    2. Match on type name or on keywords found in the description.
+    3. Detect 1:N (one-to-many) or N:1 relationships between the matched types, and order the array so that each parent type appears immediately before its child types.
+
+
+    [EXAMPLE]
+    prompt:
+        "Give me a list of study programs and their students"
+    output:
+        ["ProgramGQLModel", "StudentGQLModel"]
+    [END EXAMPLE]
+
+    [GRAPHQLTYPES] 
+```json
+    [
+  {
+    "name": "AdmissionGQLModel",
+    "description": "one (in one year) admission linked to program"
+  },
+  {
+    "name": "ClassificationTypeGQLModel",
+    "description": ""
+  },
+  {
+    "name": "DigitalFormFieldGQLModel",
+    "description": "Represents a field in a digital form.\n\nDefines properties of an individual input, including support for computed values."
+  },
+  {
+    "name": "DigitalFormGQLModel",
+    "description": "Represents a digital form used to capture user input.\n\nDefines the overall structure of the form and stores its submissions."
+  },
+  {
+    "name": "DigitalFormSectionGQLModel",
+    "description": "Represents a section (group) of a digital form.\n\nSupports nested sections and repetition."
+  },
+  {
+    "name": "DigitalSubmissionFieldGQLModel",
+    "description": "Represents a response for a specific submission field within a submission.\n\nLinks the user's provided value with the corresponding submission field."
+  },
+  {
+    "name": "DigitalSubmissionGQLModel",
+    "description": "Represents a submission of a digital form filled out by a user.\n\nAggregates responses for all the fields defined in the form."
+  },
+  {
+    "name": "DigitalSubmissionSectionGQLModel",
+    "description": "Entity representing a Submission section"
+  },
+  {
+    "name": "DocumentGQLModel",
+    "description": "Interface for a Document either a DigitalDocument or a PhysicalDocument"
+  },
+  {
+    "name": "DocumentTypeGQLModel",
+    "description": "Entity representing a Document type"
+  },
+  {
+    "name": "ElectronicDocumentGQLModel",
+    "description": "Represents a digital form used to capture user input.\n\nDefines the overall structure of the form and stores its submissions."
+  },
+  {
+    "name": "EvaluationGQLModel",
+    "description": "Exam evaluation"
+  },
+  {
+    "name": "EventFacilityReservationGQLModel",
+    "description": "Entity representing a reservation of a Facility for the Event "
+  },
+  {
+    "name": "EventGQLModel",
+    "description": "Entity representing a Event"
+  },
+  {
+    "name": "EventInvitationGQLModel",
+    "description": "Entity representing a Invitation to an Event and also presence of a user, invitation state and presence is managed by state"
+  },
+  {
+    "name": "EventTypeGQLModel",
+    "description": "Entity representing a Event Type"
+  },
+  {
+    "name": "ExamGQLModel",
+    "description": "Exam definition"
+  },
+  {
+    "name": "ExternalIdGQLModel",
+    "description": "Entity representing an external type id (like SCOPUS identification / id)"
+  },
+  {
+    "name": "ExternalIdTypeGQLModel",
+    "description": "Entity representing an external type id ()"
+  },
+  {
+    "name": "FacilityGQLModel",
+    "description": "Entity representing a Facility"
+  },
+  {
+    "name": "FacilityTypeGQLModel",
+    "description": "Entity representing a Facility type tree"
+  },
+  {
+    "name": "GroupCategoryGQLModel",
+    "description": "Entity representing a group category (like Academic structures)"
+  },
+  {
+    "name": "GroupGQLModel",
+    "description": "## Description\n\nGroup is an entity with members.  \n\nSkupina je entita se \u010dleny.\n\n\n\n## Details\n\n- It can have a master group; only one master group is allowed.  \n\n  M\u016f\u017ee m\u00edt nad\u0159azenou skupinu; je povolena pouze jedna nad\u0159azen\u00e1 skupina.\n\n- Groups are organized in a hierarchical tree structure.  \n\n  Skupiny jsou organizov\u00e1ny ve stromov\u00e9 hierarchii.\n\n- Roles can be defined on the group to control permissions and access.  \n\n  Na skupin\u011b lze definovat role, kter\u00e9 ovliv\u0148uj\u00ed opr\u00e1vn\u011bn\u00ed a p\u0159\u00edstup.\n\n\n\n## Business Rules\n\n- A group may have only one master group.  \n\n  Skupina m\u016f\u017ee m\u00edt pouze jednu nad\u0159azenou skupinu.\n\n- The hierarchy must be consistent.  \n\n  Hierarchie mus\u00ed b\u00fdt udr\u017eov\u00e1na konzistentn\u011b."
+  },
+  {
+    "name": "GroupTypeGQLModel",
+    "description": "Entity representing a group type (like Faculty)"
+  },
+  {
+    "name": "LessonGQLModel",
+    "description": "Lesson entity"
+  },
+  {
+    "name": "LessonTypeGQLModel",
+    "description": "LessonType entity"
+  },
+  {
+    "name": "MembershipGQLModel",
+    "description": "## Description\n\nEntity representing a relation between a user and a group.\n\nEntita reprezentuj\u00edc\u00ed vztah mezi u\u017eivatelem a skupinou.\n\n\n\n## Details\n\nThis type defines the membership of a user in a group, including references to both the user and the group, as well as details on membership validity and effective dates.\n\nTento typ definuje \u010dlenstv\u00ed u\u017eivatele ve skupin\u011b, v\u010detn\u011b odkaz\u016f na u\u017eivatele a skupinu, platnosti \u010dlenstv\u00ed a \u010dasov\u00fdch \u00fadaj\u016f."
+  },
+  {
+    "name": "Mutation",
+    "description": "root type for mutations"
+  },
+  {
+    "name": "PaymentGQLModel",
+    "description": "one (in one year) admission linked to program"
+  },
+  {
+    "name": "PaymentInfoGQLModel",
+    "description": "one (in one year) admission linked to program"
+  },
+  {
+    "name": "ProgramFormTypeGQLModel",
+    "description": ""
+  },
+  {
+    "name": "ProgramGQLModel",
+    "description": "Program entity, represents an accredited study"
+  },
+  {
+    "name": "ProgramLanguageTypeGQLModel",
+    "description": "language definition, often CZ or EN"
+  },
+  {
+    "name": "ProgramLevelTypeGQLModel",
+    "description": "determine Bc. / Mgr. / Ph.D."
+  },
+  {
+    "name": "ProgramTitleTypeGQLModel",
+    "description": "Specifies title if ended successfully"
+  },
+  {
+    "name": "ProgramTypeGQLModel",
+    "description": "Unites attributes into single type"
+  },
+  {
+    "name": "Query",
+    "description": null
+  },
+  {
+    "name": "RBACItem",
+    "description": ""
+  },
+  {
+    "name": "RBACObjectGQLModel",
+    "description": null
+  },
+  {
+    "name": "RoleCategoryGQLModel",
+    "description": "Entity representing a role type (like Dean)"
+  },
+  {
+    "name": "RoleGQLModel",
+    "description": "## Description\n\nEntity representing a role of a user in a group (e.g. user A in group B is Dean)\n\nEntita reprezentuj\u00edc\u00ed roli u\u017eivatele ve skupin\u011b (nap\u0159. u\u017eivatel A ve skupin\u011b B je Dekan)\n\n\n\n## Details\n\nIncludes role validity, deputy status, start and end dates, and identifiers linking to role type, user, and group. Provides resolvers to fetch detailed information for role type, user, and group.\n\nObsahuje informace o platnosti role, statusu z\u00e1stupce, datu n\u00e1stupu a ukon\u010den\u00ed, a identifik\u00e1tory pro typ role, u\u017eivatele a skupinu. Obsahuje resolvery pro na\u010d\u00edt\u00e1n\u00ed podrobn\u00fdch informac\u00ed.\n\n\n\n## Permissions\n\nAccessible only to authenticated users.\n\nP\u0159\u00edstup je omezen pouze na autentizovan\u00e9 u\u017eivatele."
+  },
+  {
+    "name": "RoleTypeGQLModel",
+    "description": "Entity representing a role type (like Dean)"
+  },
+  {
+    "name": "RoleTypeListGQLModel",
+    "description": ""
+  },
+  {
+    "name": "SemesterGQLModel",
+    "description": "Semester entity, allows division of subject into smaller parts"
+  },
+  {
+    "name": "StateGQLModel",
+    "description": "Entity representing a state of state machine"
+  },
+  {
+    "name": "StateMachineGQLModel",
+    "description": "Entity representing a state machine"
+  },
+  {
+    "name": "StateTransitionGQLModel",
+    "description": "Entity representing an entity type"
+  },
+  {
+    "name": "StudentDocumentGQLModel",
+    "description": "documents related to the student"
+  },
+  {
+    "name": "StudentGQLModel",
+    "description": ""
+  },
+  {
+    "name": "StudyPlanGQLModel",
+    "description": null
+  },
+  {
+    "name": "StudyPlanLessonGQLModel",
+    "description": "On row in studyplan"
+  },
+  {
+    "name": "SubjectGQLModel",
+    "description": "Subject entity"
+  },
+  {
+    "name": "TopicGQLModel",
+    "description": "Topic entity"
+  },
+  {
+    "name": "UserGQLModel",
+    "description": "Description:\n\nEntity representing a user\n\nEntita reprezentuj\u00edc\u00edho u\u017eivatele\n\n\n\nDetails:\n\nGraphQL type that models user data including personal details, roles, memberships, and groups.\n\nGraphQL typ modeluj\u00edc\u00ed data u\u017eivatele v\u010detn\u011b osobn\u00edch \u00fadaj\u016f, rol\u00ed, \u010dlenstv\u00ed a skupin.\n\n\n\nPermissions:\n\nAccess to this type is restricted to authenticated users.\n\nP\u0159\u00edstup k tomuto typu je omezen na autentizovan\u00e9 u\u017eivatele."
+  }
+]
+```
+    [END GRAPHQLTYPES] 
+
+
+</message>
+<message role="user">{{user_prompt}}</message>

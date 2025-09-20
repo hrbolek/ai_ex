@@ -286,7 +286,7 @@ async def get_context(
     }
     # raise ValueError("`get_context` is not used by FastAPI GraphQL Router")
 
-from .gql import schema
+from GraphTypeDefinitions import schema
 graphql_app = GraphQLRouter(
     schema=schema, 
     # graphiql=True, 
@@ -312,3 +312,16 @@ from fastapi.staticfiles import StaticFiles
 app.mount("/assets", StaticFiles(directory="backend/static/assets"), name="static")
 # @app.get("/assets")
 # async def serve_assets
+
+# async def main():
+#     from SemanticKernel import openChat
+
+#     stream = await openChat()
+#     while True:
+#         user_input = input("Uživatel: ")
+#         if user_input == "exit":
+#             break
+#         response = await stream(user_input)
+#         print(f"response: {response}")
+
+# asyncio.run(main())

@@ -1,11 +1,17 @@
 import strawberry
 
 from .DocumentGQLModel import DocumentQuery
-from .SearchGQLModel import SearchQuery
+from .AISearchGQLModel import AISearchQuery
 from .UserChannelGQLModel import UserChannelQuery
+from .AIApiCallGQLModel import AIApiCallQuery
 
 @strawberry.type(
     description="Query root type"
 )
-class Query(DocumentQuery, SearchQuery, UserChannelQuery):
+class Query(
+    DocumentQuery, 
+    AISearchQuery, 
+    UserChannelQuery,
+    AIApiCallQuery
+):
     pass

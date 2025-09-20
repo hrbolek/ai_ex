@@ -5,7 +5,7 @@ import strawberry.types
 
 from .shared import get_user_from_info
 from .SubscriptionChannels import get_channel_queue
-from .MessageGQLModel import MessageGQLModel
+from .AIMessageGQLModel import AIMessageGQLModel
 @strawberry.type
 class Subscription:
     # @strawberry.subscription
@@ -26,7 +26,7 @@ class Subscription:
     async def user_channel_messages(
         self, info: strawberry.types.Info,
         channel: str
-    ) -> typing.AsyncGenerator[typing.Optional[MessageGQLModel], None]:
+    ) -> typing.AsyncGenerator[typing.Optional[AIMessageGQLModel], None]:
         user = get_user_from_info(info)
         user_id = user["id"]
         queue = get_channel_queue(user_id, channel)

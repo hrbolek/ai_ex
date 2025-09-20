@@ -4,18 +4,18 @@ import strawberry
 
 from .DocumentGQLModel import DocumentGQLModel, DocumentFragmentGQLModel
 
-SearchGQLModel = typing.Annotated["SearchGQLModel", strawberry.lazy(".SearchGQLModel")]
+AISearchGQLModel = typing.Annotated["AISearchGQLModel", strawberry.lazy(".AISearchGQLModel")]
 
 AttachmentGQLModel = typing.Union[
     DocumentGQLModel,
     DocumentFragmentGQLModel,
-    SearchGQLModel
+    AISearchGQLModel
 ]
 
 @strawberry.type(
     description="One message"
 )
-class MessageGQLModel:
+class AIMessageGQLModel:
 
     msg: str = strawberry.field(
         description="the text part of message"

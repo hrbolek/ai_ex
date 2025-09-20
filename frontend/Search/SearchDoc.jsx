@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { AutoGrowTextarea } from './AutoGrowTextarea';
 import { HistoryItem } from './HistoryItem';
 import { Loader } from './Loader';
@@ -33,6 +33,10 @@ const searchQuery = `query search($search: String!) {
   }
 }`
 
+const apiQuery = `query search($search: String!) {
+  apiQueryByText(apiCall: {query: $search, id: "ba05ce5d-5bbe-4847-bc44-d4b4b2c94771"})
+}`
+
 export const SearchDoc = () => {
     const [search, setSearch] = useState("");
     const [history, setHistory] = useState([]);
@@ -44,7 +48,8 @@ export const SearchDoc = () => {
         loading: query_loading, 
         fetch 
     } = useGraphQLQuery({
-        query: searchQuery, 
+        // query: searchQuery, 
+        query: apiQuery,
         variables: {"search": ""}, 
         deferred: true
     })
@@ -83,7 +88,7 @@ export const SearchDoc = () => {
 
     
     const { data, error } = useGraphQLSubscription({
-        url: 'ws://localhost:8000/gql',
+        url: 'ws://localhost:8000/gql', 
         query: subscriptionQuery,
         onData: onData
     });

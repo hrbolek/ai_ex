@@ -1,0 +1,1 @@
+GQLUG_ENDPOINT_URL=http://localhost:33001/api/gql
