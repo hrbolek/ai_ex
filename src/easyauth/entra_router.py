@@ -52,7 +52,10 @@ def create_entra_router(
     token_database.start()
 
     def prejson(data):
-        return json.dumps(data, indent=4, ensure_ascii=False)
+        if isinstance(data, dict):
+            return json.dumps(data, indent=4, ensure_ascii=False)
+        
+        return f"{data}"
 
     def decodeJWTToken_sync(jwt_token: str) -> dict:
         try:
@@ -121,7 +124,7 @@ def create_entra_router(
         while state in simple_database:
             state = uuid.uuid4().hex
         params = request.query_params   
-        redir = params.get("redirect_uri", "/")
+        redir = params.get("next", "/")
         if not isinstance(redir, str) or not redir.startswith("/"):
             redir = "/"
         simple_database[state] = {
@@ -184,22 +187,27 @@ def create_entra_router(
                     return RedirectResponse(url="/")
                 token_data = await entra_response.json()
                 logging.info(f"got token_data: {token_data}")
-                access_token = token_data.get("access_token")
+                
                 expires_in = int(token_data.get("expires_in", 3600))
                 
-                token_database.set(access_token, token_data, expires_in)
-                # token_database[access_token] = {
-                #     "token_data": token_data
-                # }
+                id_token = token_data.get("id_token")
+                if not id_token:
+                    return RedirectResponse(url="/")  # fail-safe
+                
+                access_token = token_data.get("access_token")
                 if not access_token:
                     logging.info("auth.redirecting to root, access_token missing")
                     return RedirectResponse(url="/")
+
+                token_database.set(access_token, token_data, expires_in)
+                token_database.set(id_token, token_data, expires_in)
+
                 url=state_data['redirect_uri']
                 logging.info(f"auth.redirecting to {url}")
                 result = RedirectResponse(url=state_data['redirect_uri'])
                 cookie_setup = {
                     "key": "authorization",
-                    "value": access_token,
+                    "value": id_token,
                     "httponly": True,
                     # "max_age": token_data.get("expires_in", 3600),  # Výchozí hodnota 1 hodina
                     "secure": True if request.url.scheme == "https" else False,
@@ -241,9 +249,9 @@ def create_entra_router(
         # Zjisti, zda uživatel má session/token (např. v cookies, session, headeru...)
         access_token = request.cookies.get("authorization")
         token_data = token_database.get(access_token)
-        message = "<div>Hello, Guest! Please <a href='/login?redirect_uri=/me'>log in</a></div>."
+        message = "<div>Hello, Guest! Please <a href='/login?next=/me'>log in</a></div>."
         if token_data:
-            jwt_token = token_data["token_data"].get("id_token") or token_data["token_data"].get("access_token")
+            jwt_token = token_data.get("id_token") or token_data.get("access_token")
             if jwt_token:
                 decoded_token = await decodeJWTToken(jwt_token)
                 message = f"<pre>token{prejson(decoded_token)}</pre>"

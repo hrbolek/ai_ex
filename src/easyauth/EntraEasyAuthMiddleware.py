@@ -13,8 +13,8 @@ from .core import EntraIDClient, make_easyauth_headers_from_claims, require_auth
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-
 class EntraEasyAuthMiddleware(BaseHTTPMiddleware):
+
     def __init__(
         self,
         app,
@@ -128,7 +128,10 @@ class EntraEasyAuthMiddleware(BaseHTTPMiddleware):
             )
             logging.info("token is ok")
         except ValueError as e:
-            logging.info("token is NOT ok")
+            logging.info((
+                "token is NOT ok"
+                f" (error: {e}, "
+            ))
             if self.redirect_on_unauth and request.method in {"GET", "HEAD"}:
                 return RedirectResponse(self._build_login_url(request), status_code=302)
             return JSONResponse(
