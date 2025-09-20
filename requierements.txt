@@ -1,0 +1,4 @@
+authlib
+starlette
+fastapi
+python-jose[cryptography]

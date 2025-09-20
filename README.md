@@ -45,3 +45,7 @@ print("Hotovo! Container běží.")
 ```bash
 uvicorn backend.main:app --app-dir backend --env-file environment.txt --port 8001
 ```
+
+```bash
+uvicorn main:app --env-file local.env.txt --port 8000
+```
