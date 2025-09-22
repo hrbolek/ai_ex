@@ -167,3 +167,21 @@ def require_authorization(
         if not set(roles).issubset(granted_roles):
             raise PermissionError("Insufficient role")
     return True
+
+
+# import httpx
+
+# async def exchange_obo_to_graph(user_access_token: str, tenant: str, client_id: str, client_secret: str) -> str:
+#     token_url = f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
+#     data = {
+#         "client_id": client_id,
+#         "client_secret": client_secret,
+#         "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+#         "requested_token_use": "on_behalf_of",
+#         "scope": "https://graph.microsoft.com/.default",
+#         "assertion": user_access_token,
+#     }
+#     async with httpx.AsyncClient(timeout=10) as c:
+#         r = await c.post(token_url, data=data)
+#         r.raise_for_status()
+#         return r.json()["access_token"]

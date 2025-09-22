@@ -4,6 +4,7 @@ import os
 from fastapi import FastAPI, Request, Depends, HTTPException
 
 from src.easyauth import EntraEasyAuthMiddleware, EntraIDClient, require, create_entra_router
+from src.api import create_api_router
 
 AZURE_TENANT_ID = os.getenv("AZURE_TENANT_ID", "<TENANT_ID>")
 AUD    = "api://<YOUR_API_ID_URI>"  # nebo client_id API
@@ -20,17 +21,20 @@ entra_router = create_entra_router(
 )
 
 entra_client = EntraIDClient(tenant_id=AZURE_TENANT_ID, audience=AUD)
-# app.add_middleware(EntraEasyAuthMiddleware, entra=entra_client, pass_through=("/public", "/health"))
-app.add_middleware(
-    EntraEasyAuthMiddleware,
-    entra_client=entra_client,
-    pass_through=("/public", "/health", "/login", "/auth", "/login/", "/auth/"),
-    login_path="/login",                      # nebo jméno route, pokud používáš url_for("entra_login")
-    # external_base_url="https://app.example.com",  # za reverse proxy
-    redirect_on_unauth=True,
-)
-# app.add_middleware(EntraEasyAuthMiddleware, entra=entra_client, pass_through=())
+
+# app.add_middleware(
+#     EntraEasyAuthMiddleware,
+#     entra_client=entra_client,
+#     pass_through=("/public", "/health", "/login", "/auth", "/login/", "/auth/"),
+#     login_path="/login",                      # nebo jméno route, pokud používáš url_for("entra_login")
+#     # external_base_url="https://app.example.com",  # za reverse proxy
+#     redirect_on_unauth=True,
+# )
+
 app.include_router(entra_router)
+
+api_router = create_api_router()
+app.include_router(api_router)
 
 @app.get("/public/ping")
 async def ping(): return {"ok": True}
